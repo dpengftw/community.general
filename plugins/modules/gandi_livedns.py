@@ -12,17 +12,32 @@ DOCUMENTATION = r'''
 ---
 module: gandi_livedns
 author:
-- Gregory Thiemonge (@gthiemonge)
+  - Gregory Thiemonge (@gthiemonge)
 version_added: "2.3.0"
 short_description: Manage Gandi LiveDNS records
 description:
-- "Manages DNS records by the Gandi LiveDNS API, see the docs: U(https://doc.livedns.gandi.net/)."
+  - "Manages DNS records by the Gandi LiveDNS API, see the docs: U(https://doc.livedns.gandi.net/)."
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
+  personal_access_token:
+    description:
+    - Scoped API token.
+    - One of O(personal_access_token) and O(api_key) must be specified.
+    type: str
+    version_added: 9.0.0
   api_key:
     description:
     - Account API token.
+    - Note that these type of keys are deprecated and might stop working at some point.
+      Use personal access tokens instead.
+    - One of O(personal_access_token) and O(api_key) must be specified.
     type: str
-    required: true
   record:
     description:
     - Record to add.
@@ -37,7 +52,7 @@ options:
   ttl:
     description:
     - The TTL to give the new record.
-    - Required when I(state=present).
+    - Required when O(state=present).
     type: int
   type:
     description:
@@ -47,7 +62,7 @@ options:
   values:
     description:
     - The record values.
-    - Required when I(state=present).
+    - Required when O(state=present).
     type: list
     elements: str
   domain:
@@ -55,8 +70,6 @@ options:
     - The name of the Domain to work with (for example, "example.com").
     required: true
     type: str
-notes:
-- Supports C(check_mode).
 '''
 
 EXAMPLES = r'''
@@ -68,7 +81,7 @@ EXAMPLES = r'''
     values:
     - 127.0.0.1
     ttl: 7200
-    api_key: dummyapitoken
+    personal_access_token: dummytoken
   register: record
 
 - name: Create a mail CNAME record to www.my.com domain
@@ -79,7 +92,7 @@ EXAMPLES = r'''
     values:
     - www
     ttl: 7200
-    api_key: dummyapitoken
+    personal_access_token: dummytoken
     state: present
 
 - name: Change its TTL
@@ -90,7 +103,7 @@ EXAMPLES = r'''
     values:
     - www
     ttl: 10800
-    api_key: dummyapitoken
+    personal_access_token: dummytoken
     state: present
 
 - name: Delete the record
@@ -98,8 +111,18 @@ EXAMPLES = r'''
     domain: my.com
     type: CNAME
     record: mail
-    api_key: dummyapitoken
+    personal_access_token: dummytoken
     state: absent
+
+- name: Use a (deprecated) API Key
+  community.general.gandi_livedns:
+    domain: my.com
+    record: test
+    type: A
+    values:
+    - 127.0.0.1
+    ttl: 7200
+    api_key: dummyapikey
 '''
 
 RETURN = r'''
@@ -146,7 +169,8 @@ from ansible_collections.community.general.plugins.module_utils.gandi_livedns_ap
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            api_key=dict(type='str', required=True, no_log=True),
+            api_key=dict(type='str', no_log=True),
+            personal_access_token=dict(type='str', no_log=True),
             record=dict(type='str', required=True),
             state=dict(type='str', default='present', choices=['absent', 'present']),
             ttl=dict(type='int'),
@@ -157,6 +181,12 @@ def main():
         supports_check_mode=True,
         required_if=[
             ('state', 'present', ['values', 'ttl']),
+        ],
+        mutually_exclusive=[
+            ('api_key', 'personal_access_token'),
+        ],
+        required_one_of=[
+            ('api_key', 'personal_access_token'),
         ],
     )
 

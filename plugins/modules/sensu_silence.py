@@ -17,6 +17,13 @@ short_description: Manage Sensu silence entries
 description:
   - Create and clear (delete) a silence entries via the Sensu API
     for subscriptions and checks.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   check:
     type: str
@@ -142,7 +149,7 @@ def clear(module, url, check, subscription):
     # Test if silence exists before clearing
     (rc, out, changed) = query(module, url, check, subscription)
 
-    d = dict((i['subscription'], i['check']) for i in out)
+    d = {i['subscription']: i['check'] for i in out}
     subscription_exists = subscription in d
     if check and subscription_exists:
         exists = (check == d[subscription])

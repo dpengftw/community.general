@@ -19,6 +19,15 @@ author:
   - Adam Vaughan (@adamvaughan)
 requirements:
   - PagerDuty integration key
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+    details:
+      - Check mode simply does nothing except returning C(changed=true) in case the O(url) seems to be correct.
+  diff_mode:
+    support: none
 options:
   integration_key:
     description:
@@ -52,7 +61,7 @@ options:
     type: str
   environment:
     description:
-      - The environment name, typically C(production), C(staging), etc.
+      - The environment name, typically V(production), V(staging), and so on.
     required: false
     type: str
   link_url:
@@ -73,13 +82,11 @@ options:
     type: str
   validate_certs:
     description:
-      - If C(false), SSL certificates for the target URL will not be validated.
+      - If V(false), SSL certificates for the target URL will not be validated.
         This should only be used on personally controlled sites using self-signed certificates.
     required: false
     default: true
     type: bool
-notes:
-  - Supports C(check_mode). Note that check mode simply does nothing except returning C(changed=true) in case the I(url) seems to be correct.
 '''
 
 EXAMPLES = '''
@@ -103,7 +110,10 @@ EXAMPLES = '''
 
 from ansible.module_utils.urls import fetch_url
 from ansible.module_utils.basic import AnsibleModule
-from datetime import datetime
+
+from ansible_collections.community.general.plugins.module_utils.datetime import (
+    now,
+)
 
 
 def main():
@@ -154,8 +164,7 @@ def main():
     if module.params['environment']:
         custom_details['environment'] = module.params['environment']
 
-    now = datetime.utcnow()
-    timestamp = now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    timestamp = now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     payload = {
         'summary': module.params['summary'],

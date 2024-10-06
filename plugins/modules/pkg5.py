@@ -18,17 +18,24 @@ description:
   - IPS packages are the native packages in Solaris 11 and higher.
 notes:
   - The naming of IPS packages is explained at U(http://www.oracle.com/technetwork/articles/servers-storage-admin/ips-package-versioning-2232906.html).
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   name:
     description:
       - An FRMI of the package(s) to be installed/removed/updated.
-      - Multiple packages may be specified, separated by C(,).
+      - Multiple packages may be specified, separated by V(,).
     required: true
     type: list
     elements: str
   state:
     description:
-      - Whether to install (I(present), I(latest)), or remove (I(absent)) a package.
+      - Whether to install (V(present), V(latest)), or remove (V(absent)) a package.
     choices: [ absent, latest, present, installed, removed, uninstalled ]
     default: present
     type: str
@@ -47,6 +54,12 @@ options:
       - Refresh publishers before execution.
     type: bool
     default: true
+  verbose:
+    description:
+      - Set to V(true) to disable quiet execution.
+    type: bool
+    default: false
+    version_added: 9.0.0
 '''
 EXAMPLES = '''
 - name: Install Vim
@@ -83,6 +96,7 @@ def main():
             accept_licenses=dict(type='bool', default=False, aliases=['accept', 'accept_licences']),
             be_name=dict(type='str'),
             refresh=dict(type='bool', default=True),
+            verbose=dict(type='bool', default=False),
         ),
         supports_check_mode=True,
     )
@@ -149,9 +163,15 @@ def ensure(module, state, packages, params):
     else:
         no_refresh = ['--no-refresh']
 
+    if params['verbose']:
+        verbosity = []
+    else:
+        verbosity = ['-q']
+
     to_modify = list(filter(behaviour[state]['filter'], packages))
     if to_modify:
-        rc, out, err = module.run_command(['pkg', behaviour[state]['subcommand']] + dry_run + accept_licenses + beadm + no_refresh + ['-q', '--'] + to_modify)
+        rc, out, err = module.run_command(
+            ['pkg', behaviour[state]['subcommand']] + dry_run + accept_licenses + beadm + no_refresh + verbosity + ['--'] + to_modify)
         response['rc'] = rc
         response['results'].append(out)
         response['msg'] += err

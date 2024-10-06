@@ -22,25 +22,57 @@ def patch_redhat_subscription(mocker):
     """
     Function used for mocking some parts of redhat_subscription module
     """
-    mocker.patch('ansible_collections.community.general.plugins.modules.redhat_subscription.RegistrationBase.REDHAT_REPO')
+    mocker.patch('ansible_collections.community.general.plugins.modules.redhat_subscription.Rhsm.REDHAT_REPO')
     mocker.patch('ansible_collections.community.general.plugins.modules.redhat_subscription.isfile', return_value=False)
     mocker.patch('ansible_collections.community.general.plugins.modules.redhat_subscription.unlink', return_value=True)
     mocker.patch('ansible_collections.community.general.plugins.modules.redhat_subscription.AnsibleModule.get_bin_path',
                  return_value='/testbin/subscription-manager')
+    mocker.patch('ansible_collections.community.general.plugins.modules.redhat_subscription.Rhsm._can_connect_to_dbus',
+                 return_value=False)
+    mocker.patch('ansible_collections.community.general.plugins.modules.redhat_subscription.Rhsm._has_dbus_interface',
+                 return_value=False)
+    mocker.patch('ansible_collections.community.general.plugins.modules.redhat_subscription.getuid',
+                 return_value=0)
 
 
 @pytest.mark.parametrize('patch_ansible_module', [{}], indirect=['patch_ansible_module'])
 @pytest.mark.usefixtures('patch_ansible_module')
-def test_without_required_parameters(capfd, patch_redhat_subscription):
+def test_without_required_parameters_unregistered(mocker, capfd, patch_redhat_subscription):
     """
     Failure must occurs when all parameters are missing
     """
+    mock_run_command = mocker.patch.object(
+        basic.AnsibleModule,
+        'run_command',
+        return_value=(1, 'This system is not yet registered.', ''))
+
     with pytest.raises(SystemExit):
         redhat_subscription.main()
     out, err = capfd.readouterr()
     results = json.loads(out)
     assert results['failed']
     assert 'state is present but any of the following are missing' in results['msg']
+
+
+@pytest.mark.parametrize('patch_ansible_module', [{}], indirect=['patch_ansible_module'])
+@pytest.mark.usefixtures('patch_ansible_module')
+def test_without_required_parameters_registered(mocker, capfd, patch_redhat_subscription):
+    """
+    System already registered, no parameters required (state=present is the
+    default)
+    """
+    mock_run_command = mocker.patch.object(
+        basic.AnsibleModule,
+        'run_command',
+        return_value=(0, 'system identity: b26df632-25ed-4452-8f89-0308bfd167cb', ''))
+
+    with pytest.raises(SystemExit):
+        redhat_subscription.main()
+    out, err = capfd.readouterr()
+    results = json.loads(out)
+    assert 'changed' in results
+    if 'msg' in results:
+        assert results['msg'] == 'System already registered.'
 
 
 TEST_CASES = [
@@ -62,6 +94,24 @@ TEST_CASES = [
                     # Was return code checked?
                     {'check_rc': False},
                     # Mock of returned code, stdout and stderr
+                    (0, 'system identity: b26df632-25ed-4452-8f89-0308bfd167cb', '')
+                )
+            ],
+            'changed': False,
+            'msg': 'System already registered.'
+        }
+    ],
+    # Already registered system without credentials specified
+    [
+        {
+            'state': 'present',
+        },
+        {
+            'id': 'test_already_registered_system',
+            'run_command.calls': [
+                (
+                    ['/testbin/subscription-manager', 'identity'],
+                    {'check_rc': False},
                     (0, 'system identity: b26df632-25ed-4452-8f89-0308bfd167cb', '')
                 )
             ],
@@ -92,9 +142,39 @@ TEST_CASES = [
                 ),
                 (
                     ['/testbin/subscription-manager', 'register',
-                        '--serverurl', 'satellite.company.com',
                         '--username', 'admin',
                         '--password', 'admin'],
+                    {'check_rc': True, 'expand_user_and_vars': False},
+                    (0, '', '')
+                )
+            ],
+            'changed': True,
+            'msg': "System successfully registered to 'satellite.company.com'."
+        }
+    ],
+    # Test simple registration using token
+    [
+        {
+            'state': 'present',
+            'server_hostname': 'satellite.company.com',
+            'token': 'fake_token',
+        },
+        {
+            'id': 'test_registeration_token',
+            'run_command.calls': [
+                (
+                    ['/testbin/subscription-manager', 'identity'],
+                    {'check_rc': False},
+                    (1, '', '')
+                ),
+                (
+                    ['/testbin/subscription-manager', 'config', '--server.hostname=satellite.company.com'],
+                    {'check_rc': True},
+                    (0, '', '')
+                ),
+                (
+                    ['/testbin/subscription-manager', 'register',
+                        '--token', 'fake_token'],
                     {'check_rc': True, 'expand_user_and_vars': False},
                     (0, '', '')
                 )
@@ -180,7 +260,6 @@ TEST_CASES = [
                     [
                         '/testbin/subscription-manager',
                         'register',
-                        '--serverurl', 'satellite.company.com',
                         '--org', 'admin',
                         '--activationkey', 'some-activation-key'
                     ],
@@ -310,6 +389,7 @@ TEST_CASES = [
             'org_id': 'admin',
             'force_register': 'true',
             'server_proxy_hostname': 'proxy.company.com',
+            'server_proxy_scheme': 'https',
             'server_proxy_port': '12345',
             'server_proxy_user': 'proxy_user',
             'server_proxy_password': 'secret_proxy_password'
@@ -329,6 +409,7 @@ TEST_CASES = [
                         '--server.proxy_hostname=proxy.company.com',
                         '--server.proxy_password=secret_proxy_password',
                         '--server.proxy_port=12345',
+                        '--server.proxy_scheme=https',
                         '--server.proxy_user=proxy_user'
                     ],
                     {'check_rc': True},
@@ -340,80 +421,10 @@ TEST_CASES = [
                         'register',
                         '--force',
                         '--org', 'admin',
-                        '--proxy', 'proxy.company.com:12345',
-                        '--proxyuser', 'proxy_user',
-                        '--proxypassword', 'secret_proxy_password',
                         '--username', 'admin',
                         '--password', 'admin'
                     ],
                     {'check_rc': True, 'expand_user_and_vars': False},
-                    (0, '', '')
-                )
-            ],
-            'changed': True,
-            'msg': "System successfully registered to 'None'."
-        }
-    ],
-    # Test of registration using username and password and attach to pool
-    [
-        {
-            'state': 'present',
-            'username': 'admin',
-            'password': 'admin',
-            'org_id': 'admin',
-            'pool': 'ff8080816b8e967f016b8e99632804a6'
-        },
-        {
-            'id': 'test_registeration_username_password_pool',
-            'run_command.calls': [
-                (
-                    ['/testbin/subscription-manager', 'identity'],
-                    {'check_rc': False},
-                    (1, 'This system is not yet registered.', '')
-                ),
-                (
-                    [
-                        '/testbin/subscription-manager',
-                        'register',
-                        '--org', 'admin',
-                        '--username', 'admin',
-                        '--password', 'admin'
-                    ],
-                    {'check_rc': True, 'expand_user_and_vars': False},
-                    (0, '', '')
-                ),
-                (
-                    [
-                        'subscription-manager list --available',
-                        {'check_rc': True, 'environ_update': {'LANG': 'C', 'LC_ALL': 'C', 'LC_MESSAGES': 'C'}},
-                        (0,
-                         '''
-+-------------------------------------------+
-    Available Subscriptions
-+-------------------------------------------+
-Subscription Name:   SP Server Premium (S: Premium, U: Production, R: SP Server)
-Provides:            SP Server Bits
-SKU:                 sp-server-prem-prod
-Contract:            0
-Pool ID:             ff8080816b8e967f016b8e99632804a6
-Provides Management: Yes
-Available:           5
-Suggested:           1
-Service Type:        L1-L3
-Roles:               SP Server
-Service Level:       Premium
-Usage:               Production
-Add-ons:
-Subscription Type:   Standard
-Starts:              06/25/19
-Ends:                06/24/20
-Entitlement Type:    Physical
-''', ''),
-                    ]
-                ),
-                (
-                    'subscription-manager attach --pool ff8080816b8e967f016b8e99632804a6',
-                    {'check_rc': True},
                     (0, '', '')
                 )
             ],
@@ -712,9 +723,6 @@ Entitlement Type:    Physical
     [
         {
             'state': 'present',
-            'username': 'admin',
-            'password': 'admin',
-            'org_id': 'admin',
             'pool_ids': [{'ff8080816b8e967f016b8e99632804a6': 2}, {'ff8080816b8e967f016b8e99747107e9': 4}]
         },
         {

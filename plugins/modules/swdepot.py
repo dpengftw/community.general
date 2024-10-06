@@ -20,6 +20,13 @@ description:
     - Will install, upgrade and remove packages with swdepot package manager (HP-UX)
 notes: []
 author: "Raul Melo (@melodous)"
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: none
 options:
     name:
         description:
@@ -29,7 +36,7 @@ options:
         type: str
     state:
         description:
-            - whether to install (C(present), C(latest)), or remove (C(absent)) a package.
+            - whether to install (V(present), V(latest)), or remove (V(absent)) a package.
         required: true
         choices: [ 'present', 'latest', 'absent']
         type: str
@@ -61,7 +68,6 @@ EXAMPLES = '''
 import re
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.six.moves import shlex_quote
 
 
 def compare_package(version1, version2):
@@ -87,13 +93,13 @@ def compare_package(version1, version2):
 def query_package(module, name, depot=None):
     """ Returns whether a package is installed or not and version. """
 
-    cmd_list = '/usr/sbin/swlist -a revision -l product'
+    cmd_list = ['/usr/sbin/swlist', '-a', 'revision', '-l', 'product']
     if depot:
-        rc, stdout, stderr = module.run_command("%s -s %s %s | grep %s" % (cmd_list, shlex_quote(depot), shlex_quote(name), shlex_quote(name)),
-                                                use_unsafe_shell=True)
-    else:
-        rc, stdout, stderr = module.run_command("%s %s | grep %s" % (cmd_list, shlex_quote(name), shlex_quote(name)), use_unsafe_shell=True)
+        cmd_list.extend(['-s', depot])
+    cmd_list.append(name)
+    rc, stdout, stderr = module.run_command(cmd_list)
     if rc == 0:
+        stdout = ''.join(line for line in stdout.splitlines(True) if name in line)
         version = re.sub(r"\s\s+|\t", " ", stdout).strip().split()[1]
     else:
         version = None
@@ -105,7 +111,7 @@ def remove_package(module, name):
     """ Uninstall package if installed. """
 
     cmd_remove = '/usr/sbin/swremove'
-    rc, stdout, stderr = module.run_command("%s %s" % (cmd_remove, name))
+    rc, stdout, stderr = module.run_command([cmd_remove, name])
 
     if rc == 0:
         return rc, stdout
@@ -116,8 +122,8 @@ def remove_package(module, name):
 def install_package(module, depot, name):
     """ Install package if not already installed """
 
-    cmd_install = '/usr/sbin/swinstall -x mount_all_filesystems=false'
-    rc, stdout, stderr = module.run_command("%s -s %s %s" % (cmd_install, depot, name))
+    cmd_install = ['/usr/sbin/swinstall', '-x', 'mount_all_filesystems=false']
+    rc, stdout, stderr = module.run_command(cmd_install + ["-s", depot, name])
     if rc == 0:
         return rc, stdout
     else:

@@ -15,6 +15,13 @@ module: ipmi_boot
 short_description: Management of order of boot devices
 description:
   - Use this module to manage order of boot devices
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   name:
     description:
@@ -86,7 +93,6 @@ options:
     type: bool
     default: false
 requirements:
-  - "python >= 2.6"
   - pyghmi
 author: "Bulat Gaifullin (@bgaifullin) <gaifullinbf@gmail.com>"
 '''

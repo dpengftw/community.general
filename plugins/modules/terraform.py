@@ -13,8 +13,16 @@ DOCUMENTATION = r'''
 module: terraform
 short_description: Manages a Terraform deployment (and plans)
 description:
-     - Provides support for deploying resources with Terraform and pulling
-       resource information back into Ansible.
+  - Provides support for deploying resources with Terraform and pulling
+    resource information back into Ansible.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: full
+    version_added: 8.3.0
 options:
   state:
     choices: ['planned', 'present', 'absent']
@@ -48,7 +56,9 @@ options:
     version_added: 3.0.0
   workspace:
     description:
-      - The terraform workspace to work with.
+      - The terraform workspace to work with. This sets the E(TF_WORKSPACE) environmental variable
+        that is used to override workspace selection. For more information about workspaces
+        have a look at U(https://developer.hashicorp.com/terraform/language/state/workspaces).
     type: str
     default: default
   purge_workspace:
@@ -74,7 +84,6 @@ options:
     description:
       - The path to a variables file for Terraform to fill into the TF
         configurations. This can accept a list of paths to multiple variables files.
-      - Up until Ansible 2.9, this option was usable as I(variables_file).
     type: list
     elements: path
     aliases: [ 'variables_file' ]
@@ -82,18 +91,18 @@ options:
     description:
       - A group of key-values pairs to override template variables or those in variables files.
         By default, only string and number values are allowed, which are passed on unquoted.
-      - Support complex variable structures (lists, dictionaries, numbers, and booleans) to reflect terraform variable syntax when I(complex_vars=true).
+      - Support complex variable structures (lists, dictionaries, numbers, and booleans) to reflect terraform variable syntax when O(complex_vars=true).
       - Ansible integers or floats are mapped to terraform numbers.
       - Ansible strings are mapped to terraform strings.
       - Ansible dictionaries are mapped to terraform objects.
       - Ansible lists are mapped to terraform lists.
       - Ansible booleans are mapped to terraform booleans.
-      - "B(Note) passwords passed as variables will be visible in the log output. Make sure to use I(no_log=true) in production!"
+      - "B(Note) passwords passed as variables will be visible in the log output. Make sure to use C(no_log=true) in production!"
     type: dict
   complex_vars:
     description:
       - Enable/disable capability to handle complex variable structures for C(terraform).
-      - If C(true) the I(variables) also accepts dictionaries, lists, and booleans to be passed to C(terraform).
+      - If V(true) the O(variables) also accepts dictionaries, lists, and booleans to be passed to C(terraform).
         Strings that are passed are correctly quoted.
       - When disabled, supports only simple variables (strings, integers, and floats), and passes them on unquoted.
     type: bool
@@ -126,7 +135,7 @@ options:
     type: bool
   overwrite_init:
     description:
-      - Run init even if C(.terraform/terraform.tfstate) already exists in I(project_path).
+      - Run init even if C(.terraform/terraform.tfstate) already exists in O(project_path).
     default: true
     type: bool
     version_added: '3.2.0'
@@ -156,7 +165,7 @@ options:
   check_destroy:
     description:
       - Apply only when no resources are destroyed. Note that this only prevents "destroy" actions,
-        but not "destroy and re-create" actions. This option is ignored when I(state=absent).
+        but not "destroy and re-create" actions. This option is ignored when O(state=absent).
     type: bool
     default: false
     version_added: '3.3.0'
@@ -209,7 +218,7 @@ EXAMPLES = """
   community.general.terraform:
     project_path: '{{ project_dir }}'
     state: present
-    camplex_vars: true
+    complex_vars: true
     variables:
       vm_name: "{{ inventory_hostname }}"
       vm_vcpus: 2
@@ -242,7 +251,7 @@ EXAMPLES = """
 RETURN = """
 outputs:
   type: complex
-  description: A dictionary of all the TF outputs by their assigned name. Use C(.outputs.MyOutputName.value) to access the value.
+  description: A dictionary of all the TF outputs by their assigned name. Use RV(ignore:outputs.MyOutputName.value) to access the value.
   returned: on success
   sample: '{"bukkit_arn": {"sensitive": false, "type": "string", "value": "arn:aws:s3:::tf-test-bukkit"}'
   contains:
@@ -297,26 +306,26 @@ def preflight_validation(bin_path, project_path, version, variables_args=None, p
     if not os.path.isdir(project_path):
         module.fail_json(msg="Path for Terraform project '{0}' doesn't exist on this host - check the path and try again please.".format(project_path))
     if LooseVersion(version) < LooseVersion('0.15.0'):
-        rc, out, err = module.run_command([bin_path, 'validate'] + variables_args, check_rc=True, cwd=project_path)
+        module.run_command([bin_path, 'validate', '-no-color'] + variables_args, check_rc=True, cwd=project_path)
     else:
-        rc, out, err = module.run_command([bin_path, 'validate'], check_rc=True, cwd=project_path)
+        module.run_command([bin_path, 'validate', '-no-color'], check_rc=True, cwd=project_path)
 
 
 def _state_args(state_file):
-    if state_file and os.path.exists(state_file):
-        return ['-state', state_file]
-    if state_file and not os.path.exists(state_file):
-        module.fail_json(msg='Could not find state_file "{0}", check the path and try again.'.format(state_file))
-    return []
+    if not state_file:
+        return []
+    if not os.path.exists(state_file):
+        module.warn('Could not find state_file "{0}", the process will not destroy any resources, please check your state file path.'.format(state_file))
+    return ['-state', state_file]
 
 
-def init_plugins(bin_path, project_path, backend_config, backend_config_files, init_reconfigure, provider_upgrade, plugin_paths):
+def init_plugins(bin_path, project_path, backend_config, backend_config_files, init_reconfigure, provider_upgrade, plugin_paths, workspace):
     command = [bin_path, 'init', '-input=false', '-no-color']
     if backend_config:
         for key, val in backend_config.items():
             command.extend([
                 '-backend-config',
-                shlex_quote('{0}={1}'.format(key, val))
+                '{0}={1}'.format(key, val)
             ])
     if backend_config_files:
         for f in backend_config_files:
@@ -328,7 +337,7 @@ def init_plugins(bin_path, project_path, backend_config, backend_config_files, i
     if plugin_paths:
         for plugin_path in plugin_paths:
             command.extend(['-plugin-dir', plugin_path])
-    rc, out, err = module.run_command(command, check_rc=True, cwd=project_path)
+    rc, out, err = module.run_command(command, check_rc=True, cwd=project_path, environ_update={"TF_WORKSPACE": workspace})
 
 
 def get_workspace_context(bin_path, project_path):
@@ -343,6 +352,7 @@ def get_workspace_context(bin_path, project_path):
             continue
         elif stripped_item.startswith('* '):
             workspace_ctx["current"] = stripped_item.replace('* ', '')
+            workspace_ctx["all"].append(stripped_item.replace('* ', ''))
         else:
             workspace_ctx["all"].append(stripped_item)
     return workspace_ctx
@@ -366,7 +376,7 @@ def remove_workspace(bin_path, project_path, workspace):
     _workspace_cmd(bin_path, project_path, 'delete', workspace)
 
 
-def build_plan(command, project_path, variables_args, state_file, targets, state, apply_args, plan_path=None):
+def build_plan(command, project_path, variables_args, state_file, targets, state, args, plan_path=None):
     if plan_path is None:
         f, plan_path = tempfile.mkstemp(suffix='.tfplan')
 
@@ -379,10 +389,14 @@ def build_plan(command, project_path, variables_args, state_file, targets, state
             plan_command.append(c)
 
     if state == "present":
-        for a in apply_args:
+        for a in args:
             local_command.remove(a)
         for c in local_command[1:]:
             plan_command.append(c)
+
+    if state == "absent":
+        for a in args:
+            plan_command.append(a)
 
     plan_command.extend(['-input=false', '-no-color', '-detailed-exitcode', '-out', plan_path])
 
@@ -417,6 +431,49 @@ def build_plan(command, project_path, variables_args, state_file, targets, state
         cmd=' '.join(plan_command),
         args=' '.join([shlex_quote(arg) for arg in variables_args])
     ))
+
+
+def get_diff(diff_output):
+    def get_tf_resource_address(e):
+        return e['resource']
+
+    diff_json_output = json.loads(diff_output)
+
+    # Ignore diff if resource_changes does not exists in tfplan
+    if 'resource_changes' in diff_json_output:
+        tf_reosource_changes = diff_json_output['resource_changes']
+    else:
+        module.warn("Cannot find resource_changes in terraform plan, diff/check ignored")
+        return False, {}
+
+    diff_after = []
+    diff_before = []
+    changed = False
+    for item in tf_reosource_changes:
+        item_change = item['change']
+        tf_before_state = {'resource': item['address'], 'change': item['change']['before']}
+        tf_after_state = {'resource': item['address'], 'change': item['change']['after']}
+
+        if item_change['actions'] == ['update'] or item_change['actions'] == ['delete', 'create']:
+            diff_before.append(tf_before_state)
+            diff_after.append(tf_after_state)
+            changed = True
+
+        if item_change['actions'] == ['delete']:
+            diff_before.append(tf_before_state)
+            changed = True
+
+        if item_change['actions'] == ['create']:
+            diff_after.append(tf_after_state)
+            changed = True
+
+    diff_before.sort(key=get_tf_resource_address)
+    diff_after.sort(key=get_tf_resource_address)
+
+    return changed, dict(
+        before=({'data': diff_before}),
+        after=({'data': diff_after}),
+    )
 
 
 def main():
@@ -485,7 +542,7 @@ def main():
 
     if force_init:
         if overwrite_init or not os.path.isfile(os.path.join(project_path, ".terraform", "terraform.tfstate")):
-            init_plugins(command[0], project_path, backend_config, backend_config_files, init_reconfigure, provider_upgrade, plugin_paths)
+            init_plugins(command[0], project_path, backend_config, backend_config_files, init_reconfigure, provider_upgrade, plugin_paths, workspace)
 
     workspace_ctx = get_workspace_context(command[0], project_path)
     if workspace_ctx["current"] != workspace:
@@ -504,7 +561,7 @@ def main():
 
     def format_args(vars):
         if isinstance(vars, str):
-            return '"{string}"'.format(string=vars.replace('\\', '\\\\').replace('"', '\\"'))
+            return '"{string}"'.format(string=vars.replace('\\', '\\\\').replace('"', '\\"')).replace('\n', '\\n')
         elif isinstance(vars, bool):
             if vars:
                 return 'true'
@@ -610,6 +667,23 @@ def main():
                                  "Consider switching the 'check_destroy' to false to suppress this error")
         command.append(plan_file)
 
+    result_diff = dict()
+    if module._diff or module.check_mode:
+        if state == 'absent':
+            plan_absent_args = ['-destroy']
+            plan_file, needs_application, out, err, command = build_plan(command, project_path, variables_args, state_file,
+                                                                         module.params.get('targets'), state, plan_absent_args, plan_file)
+        diff_command = [command[0], 'show', '-json', plan_file]
+        rc, diff_output, err = module.run_command(diff_command, check_rc=False, cwd=project_path)
+        changed, result_diff = get_diff(diff_output)
+        if rc != 0:
+            if workspace_ctx["current"] != workspace:
+                select_workspace(command[0], project_path, workspace_ctx["current"])
+            module.fail_json(msg=err.rstrip(), rc=rc, stdout=out,
+                             stdout_lines=out.splitlines(), stderr=err,
+                             stderr_lines=err.splitlines(),
+                             cmd=' '.join(command))
+
     if needs_application and not module.check_mode and state != 'planned':
         rc, out, err = module.run_command(command, check_rc=False, cwd=project_path)
         if rc != 0:
@@ -625,9 +699,9 @@ def main():
 
     outputs_command = [command[0], 'output', '-no-color', '-json'] + _state_args(state_file)
     rc, outputs_text, outputs_err = module.run_command(outputs_command, cwd=project_path)
+    outputs = {}
     if rc == 1:
         module.warn("Could not get Terraform outputs. This usually means none have been defined.\nstdout: {0}\nstderr: {1}".format(outputs_text, outputs_err))
-        outputs = {}
     elif rc != 0:
         module.fail_json(
             msg="Failure when getting Terraform outputs. "
@@ -642,7 +716,18 @@ def main():
     if state == 'absent' and workspace != 'default' and purge_workspace is True:
         remove_workspace(command[0], project_path, workspace)
 
-    module.exit_json(changed=changed, state=state, workspace=workspace, outputs=outputs, stdout=out, stderr=err, command=' '.join(command))
+    result = {
+        'state': state,
+        'workspace': workspace,
+        'outputs': outputs,
+        'stdout': out,
+        'stderr': err,
+        'command': ' '.join(command),
+        'changed': changed,
+        'diff': result_diff,
+    }
+
+    module.exit_json(**result)
 
 
 if __name__ == '__main__':

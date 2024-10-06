@@ -19,6 +19,13 @@ author: Zainab Alsaffar (@zanssa)
 requirements:
     - pdpyras python module = 4.1.1
     - PagerDuty API Access
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: none
 options:
     access_token:
         description:
@@ -33,7 +40,7 @@ options:
     pd_email:
         description:
             - The user's email address.
-            - I(pd_email) is the unique identifier used and cannot be updated using this module.
+            - O(pd_email) is the unique identifier used and cannot be updated using this module.
         required: true
         type: str
     pd_role:
@@ -45,19 +52,17 @@ options:
     state:
         description:
             - State of the user.
-            - On C(present), it creates a user if the user doesn't exist.
-            - On C(absent), it removes a user if the account exists.
+            - On V(present), it creates a user if the user doesn't exist.
+            - On V(absent), it removes a user if the account exists.
         choices: ['present', 'absent']
         default: 'present'
         type: str
     pd_teams:
         description:
             - The teams to which the user belongs.
-            - Required if I(state=present).
+            - Required if O(state=present).
         type: list
         elements: str
-notes:
-    - Supports C(check_mode).
 '''
 
 EXAMPLES = r'''
@@ -80,25 +85,12 @@ EXAMPLES = r'''
 
 RETURN = r''' # '''
 
-from ansible.module_utils.basic import AnsibleModule, missing_required_lib
-import traceback
 from os import path
+from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.community.general.plugins.module_utils import deps
 
-try:
-    from pdpyras import APISession
-    HAS_PD_PY = True
-    PD_IMPORT_ERR = None
-except ImportError:
-    HAS_PD_PY = False
-    PD_IMPORT_ERR = traceback.format_exc()
-
-try:
-    from pdpyras import PDClientError
-    HAS_PD_CLIENT_ERR = True
-    PD_CLIENT_ERR_IMPORT_ERR = None
-except ImportError:
-    HAS_PD_CLIENT_ERR = False
-    PD_CLIENT_ERR_IMPORT_ERR = traceback.format_exc()
+with deps.declare("pdpyras", url="https://github.com/PagerDuty/pdpyras"):
+    from pdpyras import APISession, PDClientError
 
 
 class PagerDutyUser(object):
@@ -202,11 +194,7 @@ def main():
         supports_check_mode=True,
     )
 
-    if not HAS_PD_PY:
-        module.fail_json(msg=missing_required_lib('pdpyras', url='https://github.com/PagerDuty/pdpyras'), exception=PD_IMPORT_ERR)
-
-    if not HAS_PD_CLIENT_ERR:
-        module.fail_json(msg=missing_required_lib('PDClientError', url='https://github.com/PagerDuty/pdpyras'), exception=PD_CLIENT_ERR_IMPORT_ERR)
+    deps.validate(module)
 
     access_token = module.params['access_token']
     pd_user = module.params['pd_user']

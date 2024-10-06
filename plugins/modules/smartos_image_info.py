@@ -15,19 +15,21 @@ module: smartos_image_info
 short_description: Get SmartOS image details
 description:
     - Retrieve information about all installed images on SmartOS.
-    - This module was called C(smartos_image_facts) before Ansible 2.9, returning C(ansible_facts).
-      Note that the M(community.general.smartos_image_info) module no longer returns C(ansible_facts)!
 author: Adam Števko (@xen0l)
 extends_documentation_fragment:
     - community.general.attributes
     - community.general.attributes.info_module
+attributes:
+    check_mode:
+        version_added: 3.3.0
+        # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 options:
     filters:
         description:
             - Criteria for selecting image. Can be any value from image
-              manifest and 'published_date', 'published', 'source', 'clones',
-              and 'size'. More information can be found at U(https://smartos.org/man/1m/imgadm)
-              under 'imgadm list'.
+              manifest and C(published_date), C(published), C(source), C(clones),
+              and C(size). More information can be found at U(https://smartos.org/man/1m/imgadm)
+              under C(imgadm list).
         type: str
 '''
 

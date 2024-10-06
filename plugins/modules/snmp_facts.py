@@ -24,6 +24,10 @@ extends_documentation_fragment:
     - community.general.attributes
     - community.general.attributes.facts
     - community.general.attributes.facts_module
+attributes:
+    check_mode:
+        version_added: 3.3.0
+        # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 options:
     host:
         description:
@@ -32,46 +36,46 @@ options:
         required: true
     version:
         description:
-            - SNMP Version to use, C(v2), C(v2c) or C(v3).
+            - SNMP Version to use, V(v2), V(v2c) or V(v3).
         type: str
         required: true
         choices: [ v2, v2c, v3 ]
     community:
         description:
-            - The SNMP community string, required if I(version) is C(v2) or C(v2c).
+            - The SNMP community string, required if O(version) is V(v2) or V(v2c).
         type: str
     level:
         description:
             - Authentication level.
-            - Required if I(version) is C(v3).
+            - Required if O(version=v3).
         type: str
         choices: [ authNoPriv, authPriv ]
     username:
         description:
             - Username for SNMPv3.
-            - Required if I(version) is C(v3).
+            - Required if O(version=v3).
         type: str
     integrity:
         description:
             - Hashing algorithm.
-            - Required if I(version) is C(v3).
+            - Required if O(version=v3).
         type: str
         choices: [ md5, sha ]
     authkey:
         description:
             - Authentication key.
-            - Required I(version) is C(v3).
+            - Required O(version=v3).
         type: str
     privacy:
         description:
             - Encryption algorithm.
-            - Required if I(level) is C(authPriv).
+            - Required if O(level=authPriv).
         type: str
         choices: [ aes, des ]
     privkey:
         description:
             - Encryption key.
-            - Required if I(level) is C(authPriv).
+            - Required if O(level=authPriv).
         type: str
     timeout:
         description:
@@ -133,7 +137,7 @@ ansible_sysname:
   type: str
   sample: ubuntu-user
 ansible_syslocation:
-  description: The physical location of this node (e.g., C(telephone closet, 3rd floor)).
+  description: The physical location of this node (for example, V(telephone closet, 3rd floor)).
   returned: success
   type: str
   sample: Sitting on the Dock of the Bay
@@ -183,20 +187,14 @@ ansible_interfaces:
 '''
 
 import binascii
-import traceback
 from collections import defaultdict
+from ansible_collections.community.general.plugins.module_utils import deps
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.common.text.converters import to_text
 
-PYSNMP_IMP_ERR = None
-try:
+with deps.declare("pysnmp"):
     from pysnmp.entity.rfc3413.oneliner import cmdgen
     from pysnmp.proto.rfc1905 import EndOfMibView
-    HAS_PYSNMP = True
-except Exception:
-    PYSNMP_IMP_ERR = traceback.format_exc()
-    HAS_PYSNMP = False
-
-from ansible.module_utils.basic import AnsibleModule, missing_required_lib
-from ansible.module_utils.common.text.converters import to_text
 
 
 class DefineOid(object):
@@ -299,17 +297,22 @@ def main():
 
     m_args = module.params
 
-    if not HAS_PYSNMP:
-        module.fail_json(msg=missing_required_lib('pysnmp'), exception=PYSNMP_IMP_ERR)
+    deps.validate(module)
 
     cmdGen = cmdgen.CommandGenerator()
-    transport_opts = dict((k, m_args[k]) for k in ('timeout', 'retries') if m_args[k] is not None)
+    transport_opts = {
+        k: m_args[k]
+        for k in ('timeout', 'retries')
+        if m_args[k] is not None
+    }
 
     # Verify that we receive a community when using snmp v2
     if m_args['version'] in ("v2", "v2c"):
         if m_args['community'] is None:
             module.fail_json(msg='Community not set when using snmp version 2')
 
+    integrity_proto = None
+    privacy_proto = None
     if m_args['version'] == "v3":
         if m_args['username'] is None:
             module.fail_json(msg='Username not set when using snmp version 3')

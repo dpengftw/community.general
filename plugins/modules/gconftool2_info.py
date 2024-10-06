@@ -60,13 +60,14 @@ class GConftoolInfo(ModuleHelper):
         ),
         supports_check_mode=True,
     )
+    use_old_vardict = False
 
     def __init_module__(self):
         self.runner = gconftool2_runner(self.module, check_rc=True)
 
     def __run__(self):
-        with self.runner.context(args_order=["get", "key"]) as ctx:
-            rc, out, err = ctx.run(get=True)
+        with self.runner.context(args_order=["state", "key"]) as ctx:
+            rc, out, err = ctx.run(state="get")
             self.vars.value = None if err and not out else out.rstrip()
 
 

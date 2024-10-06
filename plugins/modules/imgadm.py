@@ -16,6 +16,13 @@ short_description: Manage SmartOS images
 description:
     - Manage SmartOS virtual machine images through imgadm(1M)
 author: Jasper Lievisse Adriaanse (@jasperla)
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+    check_mode:
+        support: none
+    diff_mode:
+        support: none
 options:
     force:
         required: false
@@ -37,9 +44,9 @@ options:
         required: true
         choices: [ present, absent, deleted, imported, updated, vacuumed ]
         description:
-          - State the object operated on should be in. C(imported) is an alias for
-            for C(present) and C(deleted) for C(absent). When set to C(vacuumed)
-            and C(uuid) to C(*), it will remove all unused images.
+          - State the object operated on should be in. V(imported) is an alias for
+            for V(present) and V(deleted) for V(absent). When set to V(vacuumed)
+            and O(uuid=*), it will remove all unused images.
         type: str
 
     type:
@@ -53,11 +60,8 @@ options:
     uuid:
         required: false
         description:
-          - Image UUID. Can either be a full UUID or C(*) for all images.
+          - Image UUID. Can either be a full UUID or V(*) for all images.
         type: str
-
-requirements:
-    - python >= 2.6
 '''
 
 EXAMPLES = '''
@@ -135,7 +139,7 @@ class Imgadm(object):
         self.uuid = module.params['uuid']
 
         # Since there are a number of (natural) aliases, prevent having to look
-        # them up everytime we operate on `state`.
+        # them up every time we operate on `state`.
         if self.params['state'] in ['present', 'imported', 'updated']:
             self.present = True
         else:
@@ -167,7 +171,7 @@ class Imgadm(object):
 
         # There is no feedback from imgadm(1M) to determine if anything
         # was actually changed. So treat this as an 'always-changes' operation.
-        # Note that 'imgadm -v' produces unparseable JSON...
+        # Note that 'imgadm -v' produces unparsable JSON...
         self.changed = True
 
     def manage_sources(self):

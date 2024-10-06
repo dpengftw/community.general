@@ -19,31 +19,37 @@ module: scaleway_user_data
 short_description: Scaleway user_data management module
 author: Remy Leone (@remyleone)
 description:
-    - "This module manages user_data on compute instances on Scaleway."
-    - "It can be used to configure cloud-init for instance"
+    - This module manages user_data on compute instances on Scaleway.
+    - It can be used to configure cloud-init for instance.
 extends_documentation_fragment:
 - community.general.scaleway
+- community.general.attributes
 
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 
 options:
 
   server_id:
     type: str
     description:
-    - Scaleway Compute instance ID of the server
+    - Scaleway Compute instance ID of the server.
     required: true
 
   user_data:
     type: dict
     description:
     - User defined data. Typically used with C(cloud-init).
-    - Pass your cloud-init script here as a string
+    - Pass your C(cloud-init) script here as a string.
     required: false
 
   region:
     type: str
     description:
-    - Scaleway compute zone
+    - Scaleway compute zone.
     required: true
     choices:
       - ams1
@@ -123,10 +129,10 @@ def core(module):
         compute_api.module.fail_json(msg=msg)
 
     present_user_data_keys = user_data_list.json["user_data"]
-    present_user_data = dict(
-        (key, get_user_data(compute_api=compute_api, server_id=server_id, key=key))
+    present_user_data = {
+        key: get_user_data(compute_api=compute_api, server_id=server_id, key=key)
         for key in present_user_data_keys
-    )
+    }
 
     if present_user_data == user_data:
         module.exit_json(changed=changed, msg=user_data_list.json)
@@ -143,7 +149,7 @@ def core(module):
 
     # Then we patch keys that are different
     for key, value in user_data.items():
-        if key not in present_user_data or user_data[key] != present_user_data[key]:
+        if key not in present_user_data or value != present_user_data[key]:
 
             changed = True
             if compute_api.module.check_mode:

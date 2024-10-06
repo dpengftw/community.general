@@ -15,19 +15,25 @@ author: FERREIRA Christophe (@chris93111)
 version_added: "1.3.0"
 short_description: Launch a Nomad Job
 description:
-    - Launch a Nomad job.
-    - Stop a Nomad job.
-    - Force start a Nomad job
+  - Launch a Nomad job.
+  - Stop a Nomad job.
+  - Force start a Nomad job
 requirements:
   - python-nomad
 extends_documentation_fragment:
   - community.general.nomad
+  - community.general.attributes
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: none
 options:
     name:
       description:
         - Name of job for delete, stop and start job without source.
         - Name of job for delete, stop and start job without source.
-        - Either this or I(content) must be specified.
+        - Either this or O(content) must be specified.
       type: str
     state:
       description:
@@ -43,7 +49,7 @@ options:
     content:
       description:
         - Content of Nomad job.
-        - Either this or I(name) must be specified.
+        - Either this or O(name) must be specified.
       type: str
     content_format:
       description:
@@ -51,8 +57,6 @@ options:
       choices: ["hcl", "json"]
       default: hcl
       type: str
-notes:
-  - C(check_mode) is supported.
 seealso:
   - name: Nomad jobs documentation
     description: Complete documentation for Nomad API jobs.
@@ -63,6 +67,14 @@ EXAMPLES = '''
 - name: Create job
   community.general.nomad_job:
     host: localhost
+    state: present
+    content: "{{ lookup('ansible.builtin.file', 'job.hcl') }}"
+    timeout: 120
+
+- name: Connect with port to create job
+  community.general.nomad_job:
+    host: localhost
+    port: 4645
     state: present
     content: "{{ lookup('ansible.builtin.file', 'job.hcl') }}"
     timeout: 120
@@ -99,6 +111,7 @@ def run():
     module = AnsibleModule(
         argument_spec=dict(
             host=dict(required=True, type='str'),
+            port=dict(type='int', default=4646),
             state=dict(required=True, choices=['present', 'absent']),
             use_ssl=dict(type='bool', default=True),
             timeout=dict(type='int', default=5),
@@ -128,6 +141,7 @@ def run():
 
     nomad_client = nomad.Nomad(
         host=module.params.get('host'),
+        port=module.params.get('port'),
         secure=module.params.get('use_ssl'),
         timeout=module.params.get('timeout'),
         verify=module.params.get('validate_certs'),

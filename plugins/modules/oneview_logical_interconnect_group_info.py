@@ -14,14 +14,16 @@ module: oneview_logical_interconnect_group_info
 short_description: Retrieve information about one or more of the OneView Logical Interconnect Groups
 description:
     - Retrieve information about one or more of the Logical Interconnect Groups from OneView
-    - This module was called C(oneview_logical_interconnect_group_facts) before Ansible 2.9, returning C(ansible_facts).
-      Note that the M(community.general.oneview_logical_interconnect_group_info) module no longer returns C(ansible_facts)!
 requirements:
     - hpOneView >= 2.0.1
 author:
     - Felipe Bulsoni (@fgbulsoni)
     - Thiago Miotto (@tmiotto)
     - Adriane Cardozo (@adriane-cardozo)
+attributes:
+    check_mode:
+        version_added: 3.3.0
+        # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 options:
     name:
       description:

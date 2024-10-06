@@ -22,6 +22,13 @@ author:
     - "Bruce Pennypacker (@bpennypacker)"
 requirements:
     - PagerDuty API access
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+    check_mode:
+        support: none
+    diff_mode:
+        support: none
 options:
     state:
         type: str
@@ -36,7 +43,7 @@ options:
     user:
         type: str
         description:
-            - PagerDuty user ID. Obsolete. Please, use I(token) for authorization.
+            - PagerDuty user ID. Obsolete. Please, use O(token) for authorization.
     token:
         type: str
         description:
@@ -73,7 +80,7 @@ options:
         default: Created by Ansible
     validate_certs:
         description:
-            - If C(false), SSL certificates will not be validated. This should only be used
+            - If V(false), SSL certificates will not be validated. This should only be used
               on personally controlled sites using self-signed certificates.
         type: bool
         default: true
@@ -144,6 +151,10 @@ import json
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.urls import fetch_url
 
+from ansible_collections.community.general.plugins.module_utils.datetime import (
+    now,
+)
+
 
 class PagerDutyRequest(object):
     def __init__(self, module, name, user, token):
@@ -199,9 +210,9 @@ class PagerDutyRequest(object):
             return [{'id': service, 'type': 'service_reference'}]
 
     def _compute_start_end_time(self, hours, minutes):
-        now = datetime.datetime.utcnow()
-        later = now + datetime.timedelta(hours=int(hours), minutes=int(minutes))
-        start = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        now_t = now()
+        later = now_t + datetime.timedelta(hours=int(hours), minutes=int(minutes))
+        start = now_t.strftime("%Y-%m-%dT%H:%M:%SZ")
         end = later.strftime("%Y-%m-%dT%H:%M:%SZ")
         return start, end
 

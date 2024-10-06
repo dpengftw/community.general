@@ -13,15 +13,22 @@ DOCUMENTATION = r'''
 module: imc_rest
 short_description: Manage Cisco IMC hardware through its REST API
 description:
-- Provides direct access to the Cisco IMC REST API.
-- Perform any configuration changes and actions that the Cisco IMC supports.
-- More information about the IMC REST API is available from
-  U(http://www.cisco.com/c/en/us/td/docs/unified_computing/ucs/c/sw/api/3_0/b_Cisco_IMC_api_301.html)
+  - Provides direct access to the Cisco IMC REST API.
+  - Perform any configuration changes and actions that the Cisco IMC supports.
+  - More information about the IMC REST API is available from
+    U(http://www.cisco.com/c/en/us/td/docs/unified_computing/ucs/c/sw/api/3_0/b_Cisco_IMC_api_301.html).
 author:
-- Dag Wieers (@dagwieers)
+  - Dag Wieers (@dagwieers)
 requirements:
-- lxml
-- xmljson >= 0.1.8
+  - lxml
+  - xmljson >= 0.1.8
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   hostname:
     description:
@@ -44,16 +51,16 @@ options:
     description:
     - Name of the absolute path of the filename that includes the body
       of the http request being sent to the Cisco IMC REST API.
-    - Parameter C(path) is mutual exclusive with parameter C(content).
+    - Parameter O(path) is mutual exclusive with parameter O(content).
     aliases: [ 'src', 'config_file' ]
     type: path
   content:
     description:
-    - When used instead of C(path), sets the content of the API requests directly.
+    - When used instead of O(path), sets the content of the API requests directly.
     - This may be convenient to template simple requests, for anything complex use the M(ansible.builtin.template) module.
     - You can collate multiple IMC XML fragments and they will be processed sequentially in a single stream,
       the Cisco IMC output is subsequently merged.
-    - Parameter C(content) is mutual exclusive with parameter C(path).
+    - Parameter O(content) is mutual exclusive with parameter O(path).
     type: str
   protocol:
     description:
@@ -65,14 +72,14 @@ options:
     description:
     - The socket level timeout in seconds.
     - This is the time that every single connection (every fragment) can spend.
-      If this C(timeout) is reached, the module will fail with a
+      If this O(timeout) is reached, the module will fail with a
       C(Connection failure) indicating that C(The read operation timed out).
     default: 60
     type: int
   validate_certs:
     description:
-    - If C(false), SSL certificates will not be validated.
-    - This should only set to C(false) used on personally controlled sites using self-signed certificates.
+    - If V(false), SSL certificates will not be validated.
+    - This should only set to V(false) used on personally controlled sites using self-signed certificates.
     type: bool
     default: true
 notes:
@@ -81,7 +88,7 @@ notes:
 - Any configConfMo change requested has a return status of 'modified', even if there was no actual change
   from the previous configuration. As a result, this module will always report a change on subsequent runs.
   In case this behaviour is fixed in a future update to Cisco IMC, this module will automatically adapt.
-- If you get a C(Connection failure) related to C(The read operation timed out) increase the C(timeout)
+- If you get a C(Connection failure) related to C(The read operation timed out) increase the O(timeout)
   parameter. Some XML fragments can take longer than the default timeout.
 - More information about the IMC REST API is available from
   U(http://www.cisco.com/c/en/us/td/docs/unified_computing/ucs/c/sw/api/3_0/b_Cisco_IMC_api_301.html)
@@ -93,7 +100,7 @@ EXAMPLES = r'''
     hostname: '{{ imc_hostname }}'
     username: '{{ imc_username }}'
     password: '{{ imc_password }}'
-    validate_certs: false
+    validate_certs: false  # only do this when you trust the network!
     content: |
       <configConfMo><inConfig>
         <computeRackUnit dn="sys/rack-unit-1" adminPower="down"/>
@@ -105,7 +112,7 @@ EXAMPLES = r'''
     hostname: '{{ imc_hostname }}'
     username: '{{ imc_username }}'
     password: '{{ imc_password }}'
-    validate_certs: false
+    validate_certs: false  # only do this when you trust the network!
     timeout: 120
     content: |
       <!-- Configure Serial-on-LAN -->
@@ -130,7 +137,7 @@ EXAMPLES = r'''
     hostname: '{{ imc_hostname }}'
     username: '{{ imc_username }}'
     password: '{{ imc_password }}'
-    validate_certs: false
+    validate_certs: false  # only do this when you trust the network!
     content: |
       <!-- Configure PXE boot -->
       <configConfMo><inConfig>
@@ -148,7 +155,7 @@ EXAMPLES = r'''
     hostname: '{{ imc_host }}'
     username: '{{ imc_username }}'
     password: '{{ imc_password }}'
-    validate_certs: false
+    validate_certs: false  # only do this when you trust the network!
     content: |
       <configConfMo><inConfig>
         <lsbootStorage dn="sys/rack-unit-1/boot-policy/storage-read-write" access="read-write" order="1" type="storage"/>
@@ -160,7 +167,7 @@ EXAMPLES = r'''
     hostname: '{{ imc_host }}'
     username: '{{ imc_username }}'
     password: '{{ imc_password }}'
-    validate_certs: false
+    validate_certs: false  # only do this when you trust the network!
     content: |
         <configConfMo><inConfig>
           <computeRackUnit dn="sys/rack-unit-1" usrLbl="Customer Lab - POD{{ pod_id }} - {{ inventory_hostname_short }}"/>
@@ -172,7 +179,7 @@ EXAMPLES = r'''
     hostname: '{{ imc_host }}'
     username: '{{ imc_username }}'
     password: '{{ imc_password }}'
-    validate_certs: false
+    validate_certs: false  # only do this when you trust the network!
     timeout: 120
     content: |
         <configConfMo><inConfig>
@@ -261,7 +268,6 @@ output:
       errorDescr="XML PARSING ERROR: Element 'computeRackUnit', attribute 'admin_Power': The attribute 'admin_Power' is not allowed.\n"/>
 '''
 
-import datetime
 import os
 import traceback
 
@@ -284,6 +290,10 @@ except ImportError:
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 from ansible.module_utils.six.moves import zip_longest
 from ansible.module_utils.urls import fetch_url
+
+from ansible_collections.community.general.plugins.module_utils.datetime import (
+    now,
+)
 
 
 def imc_response(module, rawoutput, rawinput=''):
@@ -313,8 +323,7 @@ def merge(one, two):
     ''' Merge two complex nested datastructures into one'''
     if isinstance(one, dict) and isinstance(two, dict):
         copy = dict(one)
-        # copy.update({key: merge(one.get(key, None), two[key]) for key in two})
-        copy.update(dict((key, merge(one.get(key, None), two[key])) for key in two))
+        copy.update({key: merge(one.get(key, None), two[key]) for key in two})
         return copy
 
     elif isinstance(one, list) and isinstance(two, list):
@@ -368,14 +377,14 @@ def main():
         else:
             module.fail_json(msg='Cannot find/access path:\n%s' % path)
 
-    start = datetime.datetime.utcnow()
+    start = now()
 
     # Perform login first
     url = '%s://%s/nuova' % (protocol, hostname)
     data = '<aaaLogin inName="%s" inPassword="%s"/>' % (username, password)
     resp, auth = fetch_url(module, url, data=data, method='POST', timeout=timeout)
     if resp is None or auth['status'] != 200:
-        result['elapsed'] = (datetime.datetime.utcnow() - start).seconds
+        result['elapsed'] = (now() - start).seconds
         module.fail_json(msg='Task failed with error %(status)s: %(msg)s' % auth, **result)
     result.update(imc_response(module, resp.read()))
 
@@ -408,7 +417,7 @@ def main():
             # Perform actual request
             resp, info = fetch_url(module, url, data=data, method='POST', timeout=timeout)
             if resp is None or info['status'] != 200:
-                result['elapsed'] = (datetime.datetime.utcnow() - start).seconds
+                result['elapsed'] = (now() - start).seconds
                 module.fail_json(msg='Task failed with error %(status)s: %(msg)s' % info, **result)
 
             # Merge results with previous results
@@ -424,7 +433,7 @@ def main():
             result['changed'] = ('modified' in results)
 
         # Report success
-        result['elapsed'] = (datetime.datetime.utcnow() - start).seconds
+        result['elapsed'] = (now() - start).seconds
         module.exit_json(**result)
     finally:
         logout(module, url, cookie, timeout)

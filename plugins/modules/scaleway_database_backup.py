@@ -19,17 +19,23 @@ short_description: Scaleway database backups management module
 version_added: 1.2.0
 author: Guillaume Rodriguez (@guillaume_ro_fr)
 description:
-    - This module manages database backups on Scaleway account U(https://developer.scaleway.com).
+    - "This module manages database backups on Scaleway account U(https://developer.scaleway.com)."
 extends_documentation_fragment:
     - community.general.scaleway
+    - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   state:
     description:
         - Indicate desired state of the database backup.
-        - C(present) creates a backup.
-        - C(absent) deletes the backup.
-        - C(exported) creates a download link for the backup.
-        - C(restored) restores the backup to a new database.
+        - V(present) creates a backup.
+        - V(absent) deletes the backup.
+        - V(exported) creates a download link for the backup.
+        - V(restored) restores the backup to a new database.
     type: str
     default: present
     choices:
@@ -40,7 +46,7 @@ options:
 
   region:
     description:
-        - Scaleway region to use (for example C(fr-par)).
+        - Scaleway region to use (for example V(fr-par)).
     type: str
     required: true
     choices:
@@ -51,37 +57,37 @@ options:
   id:
     description:
         - UUID used to identify the database backup.
-        - Required for C(absent), C(exported) and C(restored) states.
+        - Required for V(absent), V(exported) and V(restored) states.
     type: str
 
   name:
     description:
         - Name used to identify the database backup.
-        - Required for C(present) state.
-        - Ignored when C(state=absent), C(state=exported) or C(state=restored).
+        - Required for V(present) state.
+        - Ignored when O(state=absent), O(state=exported) or O(state=restored).
     type: str
     required: false
 
   database_name:
     description:
         - Name used to identify the database.
-        - Required for C(present) and C(restored) states.
-        - Ignored when C(state=absent) or C(state=exported).
+        - Required for V(present) and V(restored) states.
+        - Ignored when O(state=absent) or O(state=exported).
     type: str
     required: false
 
   instance_id:
     description:
         - UUID of the instance associated to the database backup.
-        - Required for C(present) and C(restored) states.
-        - Ignored when C(state=absent) or C(state=exported).
+        - Required for V(present) and V(restored) states.
+        - Ignored when O(state=absent) or O(state=exported).
     type: str
     required: false
 
   expires_at:
     description:
         - Expiration datetime of the database backup (ISO 8601 format).
-        - Ignored when C(state=absent), C(state=exported) or C(state=restored).
+        - Ignored when O(state=absent), O(state=exported) or O(state=restored).
     type: str
     required: false
 
@@ -139,7 +145,7 @@ EXAMPLES = '''
 RETURN = '''
 metadata:
     description: Backup metadata.
-    returned: when C(state=present), C(state=exported) or C(state=restored)
+    returned: when O(state=present), O(state=exported), or O(state=restored)
     type: dict
     sample: {
         "metadata": {
@@ -164,6 +170,9 @@ import datetime
 import time
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.community.general.plugins.module_utils.datetime import (
+    now,
+)
 from ansible_collections.community.general.plugins.module_utils.scaleway import (
     Scaleway,
     scaleway_argument_spec,
@@ -183,9 +192,9 @@ def wait_to_complete_state_transition(module, account_api, backup=None):
     if backup is None or backup['status'] in stable_states:
         return backup
 
-    start = datetime.datetime.utcnow()
+    start = now()
     end = start + datetime.timedelta(seconds=wait_timeout)
-    while datetime.datetime.utcnow() < end:
+    while now() < end:
         module.debug('We are going to wait for the backup to finish its transition')
 
         response = account_api.get('/rdb/v1/regions/%s/backups/%s' % (module.params.get('region'), backup['id']))

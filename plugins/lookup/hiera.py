@@ -25,12 +25,14 @@ DOCUMENTATION = '''
       executable:
             description:
                 - Binary file to execute Hiera.
+            type: string
             default: '/usr/bin/hiera'
             env:
                 - name: ANSIBLE_HIERA_BIN
       config_file:
             description:
                 - File that describes the hierarchy of Hiera.
+            type: string
             default: '/etc/hiera.yaml'
             env:
                 - name: ANSIBLE_HIERA_CFG
@@ -60,8 +62,6 @@ RETURN = """
         type: list
         elements: str
 """
-
-import os
 
 from ansible.plugins.lookup import LookupBase
 from ansible.utils.cmd_functions import run_cmd

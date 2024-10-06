@@ -3,8 +3,8 @@
 # Copyright (c) 2019, Saranya Sridharan
 # GNU General Public License v3.0+ (see LICENSES/GPL-3.0-or-later.txt or https://www.gnu.org/licenses/gpl-3.0.txt)
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import (absolute_import, division, print_function)
 
+from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
 DOCUMENTATION = '''
@@ -15,6 +15,13 @@ author:
   - Saranya Sridharan (@saranyasridharan)
 requirements:
   - psutil(python module)
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   name:
     description: The name of the process(es) you want to get PID(s) for.
@@ -24,7 +31,7 @@ options:
     type: str
     version_added: 3.0.0
   ignore_case:
-    description: Ignore case in pattern if using the I(pattern) option.
+    description: Ignore case in pattern if using the O(pattern) option.
     type: bool
     default: false
     version_added: 3.0.0
@@ -60,17 +67,14 @@ import re
 from os.path import basename
 
 from ansible.module_utils import six
-from ansible.module_utils.basic import AnsibleModule, missing_required_lib
+from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.community.general.plugins.module_utils import deps
 from ansible.module_utils.common.text.converters import to_native
 
 from ansible_collections.community.general.plugins.module_utils.version import LooseVersion
 
-try:
+with deps.declare("psutil"):
     import psutil
-
-    HAS_PSUTIL = True
-except ImportError:
-    HAS_PSUTIL = False
 
 
 class PSAdapterError(Exception):
@@ -107,7 +111,7 @@ class PSAdapter(object):
                 attributes['cmdline'] and compare_lower(attributes['cmdline'][0], name))
 
     def _get_proc_attributes(self, proc, *attributes):
-        return dict((attribute, self._get_attribute_from_proc(proc, attribute)) for attribute in attributes)
+        return {attribute: self._get_attribute_from_proc(proc, attribute) for attribute in attributes}
 
     @staticmethod
     @abc.abstractmethod
@@ -177,8 +181,8 @@ def compare_lower(a, b):
 
 class Pids(object):
     def __init__(self, module):
-        if not HAS_PSUTIL:
-            module.fail_json(msg=missing_required_lib('psutil'))
+
+        deps.validate(module)
 
         self._ps = PSAdapter.from_package(psutil)
 

@@ -14,14 +14,19 @@ DOCUMENTATION = '''
 ---
 module: udm_share
 author:
-- Tobias Rüetschi (@keachi)
+    - Tobias Rüetschi (@keachi)
 short_description: Manage samba shares on a univention corporate server
 description:
     - "This module allows to manage samba shares on a univention corporate
        server (UCS).
        It uses the python API of the UCS to create a new object or edit it."
-requirements:
-    - Python >= 2.6
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: partial
 options:
     state:
         default: "present"
@@ -37,18 +42,17 @@ options:
     host:
         required: false
         description:
-            - Host FQDN (server which provides the share), e.g. C({{
-              ansible_fqdn }}). Required if I(state=present).
+            - Host FQDN (server which provides the share), for example V({{ ansible_fqdn }}). Required if O(state=present).
         type: str
     path:
         required: false
         description:
-            - Directory on the providing server, e.g. C(/home). Required if I(state=present).
+            - Directory on the providing server, for example V(/home). Required if O(state=present).
         type: path
     sambaName:
         required: false
         description:
-            - Windows name. Required if I(state=present).
+            - Windows name. Required if O(state=present).
         type: str
         aliases: [ samba_name ]
     ou:
@@ -125,6 +129,7 @@ options:
         description:
             - Option name in smb.conf and its value.
         type: list
+        elements: dict
         aliases: [ samba_custom_settings ]
     sambaDirectoryMode:
         default: '0755'
@@ -200,12 +205,14 @@ options:
         description:
             - Allowed host/network.
         type: list
+        elements: str
         aliases: [ samba_hosts_allow ]
     sambaHostsDeny:
         default: []
         description:
             - Denied host/network.
         type: list
+        elements: str
         aliases: [ samba_hosts_deny ]
     sambaInheritAcls:
         default: true
@@ -314,11 +321,13 @@ options:
         description:
             - Only allow access for this host, IP address or network.
         type: list
+        elements: str
     nfsCustomSettings:
         default: []
         description:
             - Option name in exports file.
         type: list
+        elements: str
         aliases: [ nfs_custom_settings ]
 '''
 
@@ -382,6 +391,7 @@ def main():
                                 aliases=['samba_csc_policy'],
                                 default='manual'),
             sambaCustomSettings=dict(type='list',
+                                     elements='dict',
                                      aliases=['samba_custom_settings'],
                                      default=[]),
             sambaDirectoryMode=dict(type='str',
@@ -418,9 +428,11 @@ def main():
                                      aliases=['samba_hide_unreadable'],
                                      default=False),
             sambaHostsAllow=dict(type='list',
+                                 elements='str',
                                  aliases=['samba_hosts_allow'],
                                  default=[]),
             sambaHostsDeny=dict(type='list',
+                                elements='str',
                                 aliases=['samba_hosts_deny'],
                                 default=[]),
             sambaInheritAcls=dict(type='bool',
@@ -474,8 +486,10 @@ def main():
                                 aliases=['samba_writeable'],
                                 default=True),
             nfs_hosts=dict(type='list',
+                           elements='str',
                            default=[]),
             nfsCustomSettings=dict(type='list',
+                                   elements='str',
                                    aliases=['nfs_custom_settings'],
                                    default=[]),
             state=dict(default='present',

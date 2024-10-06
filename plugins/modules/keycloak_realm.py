@@ -17,7 +17,6 @@ short_description: Allows administration of Keycloak realm via Keycloak API
 
 version_added: 3.0.0
 
-
 description:
     - This module allows the administration of Keycloak realm via the Keycloak REST API. It
       requires access to the REST API via OpenID Connect; the user connecting and the realm being
@@ -33,12 +32,18 @@ description:
       SAML-specific settings on an OpenID Connect client for instance and vice versa. Be careful.
       If you do not specify a setting, usually a sensible default is chosen.
 
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: full
+
 options:
     state:
         description:
             - State of the realm.
-            - On C(present), the realm will be created (or updated if it exists already).
-            - On C(absent), the realm will be removed if it exists.
+            - On V(present), the realm will be created (or updated if it exists already).
+            - On V(absent), the realm will be removed if it exists.
         choices: ['present', 'absent']
         default: 'present'
         type: str
@@ -503,8 +508,8 @@ options:
         type: int
 
 extends_documentation_fragment:
-- community.general.keycloak
-
+    - community.general.keycloak
+    - community.general.attributes
 
 author:
     - Christophe Gilles (@kris2kris)
@@ -519,6 +524,7 @@ EXAMPLES = '''
     auth_username: USERNAME
     auth_password: PASSWORD
     id: realm
+    realm: realm
     state: present
 
 - name: Delete a Keycloak realm
@@ -576,6 +582,27 @@ from ansible_collections.community.general.plugins.module_utils.identity.keycloa
 from ansible.module_utils.basic import AnsibleModule
 
 
+def normalise_cr(realmrep):
+    """ Re-sorts any properties where the order is important so that diff's is minimised and the change detection is more effective.
+
+    :param realmrep: the realmrep dict to be sanitized
+    :return: normalised realmrep dict
+    """
+    # Avoid the dict passed in to be modified
+    realmrep = realmrep.copy()
+
+    if 'enabledEventTypes' in realmrep:
+        realmrep['enabledEventTypes'] = list(sorted(realmrep['enabledEventTypes']))
+
+    if 'otpSupportedApplications' in realmrep:
+        realmrep['otpSupportedApplications'] = list(sorted(realmrep['otpSupportedApplications']))
+
+    if 'supportedLocales' in realmrep:
+        realmrep['supportedLocales'] = list(sorted(realmrep['supportedLocales']))
+
+    return realmrep
+
+
 def sanitize_cr(realmrep):
     """ Removes probably sensitive details from a realm representation.
 
@@ -589,7 +616,7 @@ def sanitize_cr(realmrep):
         if 'saml.signing.private.key' in result['attributes']:
             result['attributes'] = result['attributes'].copy()
             result['attributes']['saml.signing.private.key'] = '********'
-    return result
+    return normalise_cr(result)
 
 
 def main():
@@ -771,10 +798,12 @@ def main():
             result['changed'] = True
             if module.check_mode:
                 # We can only compare the current realm with the proposed updates we have
+                before_norm = normalise_cr(before_realm)
+                desired_norm = normalise_cr(desired_realm)
                 if module._diff:
-                    result['diff'] = dict(before=before_realm_sanitized,
-                                          after=sanitize_cr(desired_realm))
-                result['changed'] = (before_realm != desired_realm)
+                    result['diff'] = dict(before=sanitize_cr(before_norm),
+                                          after=sanitize_cr(desired_norm))
+                result['changed'] = (before_norm != desired_norm)
 
                 module.exit_json(**result)
 

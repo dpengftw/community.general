@@ -21,7 +21,8 @@ description:
   - This module return information about a container on Scaleway account.
 extends_documentation_fragment:
   - community.general.scaleway
-
+  - community.general.attributes
+  - community.general.attributes.info_module
 
 options:
   namespace_id:
@@ -89,15 +90,14 @@ container:
 '''
 
 from ansible_collections.community.general.plugins.module_utils.scaleway import (
-    SCALEWAY_ENDPOINT, SCALEWAY_REGIONS, scaleway_argument_spec, Scaleway
+    SCALEWAY_REGIONS, scaleway_argument_spec, Scaleway,
 )
 from ansible.module_utils.basic import AnsibleModule
 
 
 def info_strategy(api, wished_cn):
     cn_list = api.fetch_all_resources("containers")
-    cn_lookup = dict((fn["name"], fn)
-                     for fn in cn_list)
+    cn_lookup = {cn["name"]: cn for cn in cn_list}
 
     if wished_cn["name"] not in cn_lookup:
         msg = "Error during container lookup: Unable to find container named '%s' in namespace '%s'" % (wished_cn["name"],

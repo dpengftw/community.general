@@ -15,7 +15,14 @@ module: hponcfg
 author: Dag Wieers (@dagwieers)
 short_description: Configure HP iLO interface using hponcfg
 description:
- - This modules configures the HP iLO interface using hponcfg.
+  - This modules configures the HP iLO interface using hponcfg.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: none
+  diff_mode:
+    support: none
 options:
   path:
     description:
@@ -91,6 +98,7 @@ class HPOnCfg(ModuleHelper):
         verbose=cmd_runner_fmt.as_bool("-v"),
         minfw=cmd_runner_fmt.as_opt_val("-m"),
     )
+    use_old_vardict = False
 
     def __run__(self):
         runner = CmdRunner(

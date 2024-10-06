@@ -13,8 +13,6 @@ module: oneview_datacenter_info
 short_description: Retrieve information about the OneView Data Centers
 description:
     - Retrieve information about the OneView Data Centers.
-    - This module was called C(oneview_datacenter_facts) before Ansible 2.9, returning C(ansible_facts).
-      Note that the M(community.general.oneview_datacenter_info) module no longer returns C(ansible_facts)!
 requirements:
     - "hpOneView >= 2.0.1"
 author:
@@ -22,6 +20,10 @@ author:
     - Madhav Bharadwaj (@madhav-bharadwaj)
     - Priyanka Sood (@soodpr)
     - Ricardo Galeno (@ricardogpsf)
+attributes:
+    check_mode:
+        version_added: 3.3.0
+        # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 options:
     name:
       description:

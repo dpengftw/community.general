@@ -15,14 +15,19 @@ DOCUMENTATION = '''
 ---
 module: homebrew_cask
 author:
-- "Indrajit Raychaudhuri (@indrajitr)"
-- "Daniel Jaouen (@danieljaouen)"
-- "Enric Lluelles (@enriclluelles)"
-requirements:
-- "python >= 2.6"
+  - "Indrajit Raychaudhuri (@indrajitr)"
+  - "Daniel Jaouen (@danieljaouen)"
+  - "Enric Lluelles (@enriclluelles)"
 short_description: Install and uninstall homebrew casks
 description:
-- Manages Homebrew casks.
+  - Manages Homebrew casks.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   name:
     description:
@@ -73,8 +78,9 @@ options:
   greedy:
     description:
     - Upgrade casks that auto update.
-    - Passes --greedy to brew cask outdated when checking
-      if an installed cask has a newer version available.
+    - Passes C(--greedy) to C(brew outdated --cask) when checking
+      if an installed cask has a newer version available,
+      or to C(brew upgrade --cask) when upgrading all casks.
     type: bool
     default: false
 '''
@@ -123,6 +129,11 @@ EXAMPLES = '''
   community.general.homebrew_cask:
     upgrade_all: true
 
+- name: Upgrade all casks with greedy option
+  community.general.homebrew_cask:
+    upgrade_all: true
+    greedy: true
+
 - name: Upgrade given cask with force option
   community.general.homebrew_cask:
     name: alfred
@@ -147,6 +158,7 @@ import re
 import tempfile
 
 from ansible_collections.community.general.plugins.module_utils.version import LooseVersion
+from ansible_collections.community.general.plugins.module_utils.homebrew import HomebrewValidate
 
 from ansible.module_utils.common.text.converters import to_bytes
 from ansible.module_utils.basic import AnsibleModule
@@ -172,23 +184,6 @@ class HomebrewCask(object):
     '''A class to manage Homebrew casks.'''
 
     # class regexes ------------------------------------------------ {{{
-    VALID_PATH_CHARS = r'''
-        \w                  # alphanumeric characters (i.e., [a-zA-Z0-9_])
-        \s                  # spaces
-        :                   # colons
-        {sep}               # the OS-specific path separator
-        .                   # dots
-        \-                  # dashes
-    '''.format(sep=os.path.sep)
-
-    VALID_BREW_PATH_CHARS = r'''
-        \w                  # alphanumeric characters (i.e., [a-zA-Z0-9_])
-        \s                  # spaces
-        {sep}               # the OS-specific path separator
-        .                   # dots
-        \-                  # dashes
-    '''.format(sep=os.path.sep)
-
     VALID_CASK_CHARS = r'''
         \w                  # alphanumeric characters (i.e., [a-zA-Z0-9_])
         .                   # dots
@@ -197,58 +192,10 @@ class HomebrewCask(object):
         @                   # at symbol
     '''
 
-    INVALID_PATH_REGEX = _create_regex_group_complement(VALID_PATH_CHARS)
-    INVALID_BREW_PATH_REGEX = _create_regex_group_complement(VALID_BREW_PATH_CHARS)
     INVALID_CASK_REGEX = _create_regex_group_complement(VALID_CASK_CHARS)
     # /class regexes ----------------------------------------------- }}}
 
     # class validations -------------------------------------------- {{{
-    @classmethod
-    def valid_path(cls, path):
-        '''
-        `path` must be one of:
-         - list of paths
-         - a string containing only:
-             - alphanumeric characters
-             - dashes
-             - dots
-             - spaces
-             - colons
-             - os.path.sep
-        '''
-
-        if isinstance(path, (string_types)):
-            return not cls.INVALID_PATH_REGEX.search(path)
-
-        try:
-            iter(path)
-        except TypeError:
-            return False
-        else:
-            paths = path
-            return all(cls.valid_brew_path(path_) for path_ in paths)
-
-    @classmethod
-    def valid_brew_path(cls, brew_path):
-        '''
-        `brew_path` must be one of:
-         - None
-         - a string containing only:
-             - alphanumeric characters
-             - dashes
-             - dots
-             - spaces
-             - os.path.sep
-        '''
-
-        if brew_path is None:
-            return True
-
-        return (
-            isinstance(brew_path, string_types)
-            and not cls.INVALID_BREW_PATH_REGEX.search(brew_path)
-        )
-
     @classmethod
     def valid_cask(cls, cask):
         '''A valid cask is either None or alphanumeric + backslashes.'''
@@ -310,7 +257,7 @@ class HomebrewCask(object):
 
     @path.setter
     def path(self, path):
-        if not self.valid_path(path):
+        if not HomebrewValidate.valid_path(path):
             self._path = []
             self.failed = True
             self.message = 'Invalid path: {0}.'.format(path)
@@ -330,7 +277,7 @@ class HomebrewCask(object):
 
     @brew_path.setter
     def brew_path(self, brew_path):
-        if not self.valid_brew_path(brew_path):
+        if not HomebrewValidate.valid_brew_path(brew_path):
             self._brew_path = None
             self.failed = True
             self.message = 'Invalid brew_path: {0}.'.format(brew_path)
@@ -576,6 +523,9 @@ class HomebrewCask(object):
         else:
             cmd = [self.brew_path, 'cask', 'upgrade']
 
+        if self.greedy:
+            cmd = cmd + ['--greedy']
+
         rc, out, err = '', '', ''
 
         if self.sudo_password:
@@ -584,7 +534,12 @@ class HomebrewCask(object):
             rc, out, err = self.module.run_command(cmd)
 
         if rc == 0:
-            if re.search(r'==> No Casks to upgrade', out.strip(), re.IGNORECASE):
+            # 'brew upgrade --cask' does not output anything if no casks are upgraded
+            if not out.strip():
+                self.message = 'Homebrew casks already upgraded.'
+
+            # handle legacy 'brew cask upgrade'
+            elif re.search(r'==> No Casks to upgrade', out.strip(), re.IGNORECASE):
                 self.message = 'Homebrew casks already upgraded.'
 
             else:

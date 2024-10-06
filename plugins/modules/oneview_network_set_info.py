@@ -13,14 +13,16 @@ module: oneview_network_set_info
 short_description: Retrieve information about the OneView Network Sets
 description:
     - Retrieve information about the Network Sets from OneView.
-    - This module was called C(oneview_network_set_facts) before Ansible 2.9, returning C(ansible_facts).
-      Note that the M(community.general.oneview_network_set_info) module no longer returns C(ansible_facts)!
 requirements:
     - hpOneView >= 2.0.1
 author:
     - Felipe Bulsoni (@fgbulsoni)
     - Thiago Miotto (@tmiotto)
     - Adriane Cardozo (@adriane-cardozo)
+attributes:
+    check_mode:
+        version_added: 3.3.0
+        # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 options:
     name:
       description:
@@ -30,8 +32,8 @@ options:
     options:
       description:
         - "List with options to gather information about Network Set.
-          Option allowed: C(withoutEthernet).
-          The option C(withoutEthernet) retrieves the list of network_sets excluding Ethernet networks."
+          Option allowed: V(withoutEthernet).
+          The option V(withoutEthernet) retrieves the list of network_sets excluding Ethernet networks."
       type: list
       elements: str
 

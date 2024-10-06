@@ -22,6 +22,10 @@ description:
     - Create, update or destroy a reverse_proxy location entry in SOPHOS UTM.
     - This module needs to have the REST Ability of the UTM to be activated.
 
+attributes:
+    check_mode:
+        version_added: 3.3.0
+        # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 
 options:
     name:
@@ -84,7 +88,7 @@ result:
             description: The list of the denied network names
             type: list
         hot_standby:
-            description: Use hot standy
+            description: Use hot standby
             type: bool
         path:
             description: Path name

@@ -14,13 +14,19 @@ module: manageiq_tenant
 
 short_description: Management of tenants in ManageIQ
 extends_documentation_fragment:
-- community.general.manageiq
+  - community.general.manageiq
+  - community.general.attributes
 
 author: Evert Mulder (@evertmulder)
 description:
   - The manageiq_tenant module supports adding, updating and deleting tenants in ManageIQ.
 requirements:
-- manageiq-client
+  - manageiq-client
+attributes:
+  check_mode:
+    support: none
+  diff_mode:
+    support: none
 options:
   state:
     type: str
@@ -44,13 +50,13 @@ options:
     type: int
     description:
     - The id of the parent tenant. If not supplied the root tenant is used.
-    - The C(parent_id) takes president over C(parent) when supplied
+    - The O(parent_id) takes president over O(parent) when supplied
     required: false
     default: null
   parent:
     type: str
     description:
-    - The name of the parent tenant. If not supplied and no C(parent_id) is supplied the root tenant is used.
+    - The name of the parent tenant. If not supplied and no O(parent_id) is supplied the root tenant is used.
     required: false
     default: null
   quotas:
@@ -77,7 +83,7 @@ EXAMPLES = '''
       url: 'http://127.0.0.1:3000'
       username: 'admin'
       password: 'smartvm'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 - name: Create a tenant in ManageIQ
   community.general.manageiq_tenant:
@@ -88,7 +94,7 @@ EXAMPLES = '''
       url: 'http://127.0.0.1:3000'
       username: 'admin'
       password: 'smartvm'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 - name: Delete a tenant in ManageIQ
   community.general.manageiq_tenant:
@@ -99,7 +105,7 @@ EXAMPLES = '''
       url: 'http://127.0.0.1:3000'
       username: 'admin'
       password: 'smartvm'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 - name: Set tenant quota for cpu_allocated, mem_allocated, remove quota for vms_allocated
   community.general.manageiq_tenant:
@@ -113,7 +119,7 @@ EXAMPLES = '''
       url: 'http://127.0.0.1:3000'
       username: 'admin'
       password: 'smartvm'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 
 - name: Delete a tenant in ManageIQ using a token
@@ -124,7 +130,7 @@ EXAMPLES = '''
     manageiq_connection:
       url: 'http://127.0.0.1:3000'
       token: 'sometoken'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 '''
 
 RETURN = '''

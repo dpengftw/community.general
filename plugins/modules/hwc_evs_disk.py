@@ -22,6 +22,11 @@ version_added: '0.2.0'
 author: Huawei Inc. (@huaweicloud)
 requirements:
     - keystoneauth1 >= 3.6.0
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: none
 options:
     state:
         description:
@@ -150,7 +155,8 @@ options:
         type: str
         required: false
 extends_documentation_fragment:
-- community.general.hwc
+  - community.general.hwc
+  - community.general.attributes
 
 '''
 
@@ -765,8 +771,7 @@ def async_wait(config, result, client, timeout):
     path_parameters = {
         "job_id": ["job_id"],
     }
-    data = dict((key, navigate_value(result, path))
-                for key, path in path_parameters.items())
+    data = {key: navigate_value(result, path) for key, path in path_parameters.items()}
 
     url = build_path(module, "jobs/{job_id}", data)
 

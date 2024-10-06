@@ -12,8 +12,15 @@ DOCUMENTATION = '''
 module: oneandone_firewall_policy
 short_description: Configure 1&1 firewall policy
 description:
-     - Create, remove, reconfigure, update firewall policies.
-       This module has a dependency on 1and1 >= 1.0
+  - Create, remove, reconfigure, update firewall policies.
+    This module has a dependency on 1and1 >= 1.0.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   state:
     description:
@@ -103,7 +110,6 @@ options:
 
 requirements:
   - "1and1"
-  - "python >= 2.6"
 
 author:
   -  "Amel Ajdinovic (@aajdinov)"

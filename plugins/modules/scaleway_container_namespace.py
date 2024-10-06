@@ -22,8 +22,15 @@ description:
 extends_documentation_fragment:
   - community.general.scaleway
   - community.general.scaleway_waitable_resource
+  - community.general.attributes
 requirements:
    - passlib[argon2] >= 1.7.4
+
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 
 options:
   state:
@@ -44,7 +51,7 @@ options:
   region:
     type: str
     description:
-      - Scaleway region to use (for example C(fr-par)).
+      - Scaleway region to use (for example V(fr-par)).
     required: true
     choices:
       - fr-par
@@ -73,7 +80,7 @@ options:
   secret_environment_variables:
     description:
       - Secret environment variables of the container namespace.
-      - Updating thoses values will not output a C(changed) state in Ansible.
+      - Updating those values will not output a C(changed) state in Ansible.
       - Injected in containers at runtime.
     type: dict
     default: {}
@@ -103,7 +110,7 @@ EXAMPLES = '''
 RETURN = '''
 container_namespace:
   description: The container namespace information.
-  returned: when I(state=present)
+  returned: when O(state=present)
   type: dict
   sample:
     description: ""
@@ -126,7 +133,7 @@ container_namespace:
 from copy import deepcopy
 
 from ansible_collections.community.general.plugins.module_utils.scaleway import (
-    SCALEWAY_ENDPOINT, SCALEWAY_REGIONS, scaleway_argument_spec, Scaleway,
+    SCALEWAY_REGIONS, scaleway_argument_spec, Scaleway,
     scaleway_waitable_resource_argument_spec,
     resource_attributes_should_be_changed, SecretVariables
 )
@@ -160,8 +167,7 @@ def absent_strategy(api, wished_cn):
     changed = False
 
     cn_list = api.fetch_all_resources("namespaces")
-    cn_lookup = dict((cn["name"], cn)
-                     for cn in cn_list)
+    cn_lookup = {cn["name"]: cn for cn in cn_list}
 
     if wished_cn["name"] not in cn_lookup:
         return changed, {}
@@ -185,8 +191,7 @@ def present_strategy(api, wished_cn):
     changed = False
 
     cn_list = api.fetch_all_resources("namespaces")
-    cn_lookup = dict((cn["name"], cn)
-                     for cn in cn_list)
+    cn_lookup = {cn["name"]: cn for cn in cn_list}
 
     payload_cn = payload_from_wished_cn(wished_cn)
 

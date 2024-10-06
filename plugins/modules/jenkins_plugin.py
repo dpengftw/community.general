@@ -17,11 +17,17 @@ short_description: Add or remove Jenkins plugin
 description:
   - Ansible module which helps to manage Jenkins plugins.
 
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
+
 options:
   group:
     type: str
     description:
-      - Name of the Jenkins group on the OS.
+      - GID or name of the Jenkins group on the OS.
     default: jenkins
   jenkins_home:
     type: path
@@ -41,13 +47,13 @@ options:
   owner:
     type: str
     description:
-      - Name of the Jenkins user on the OS.
+      - UID or name of the Jenkins user on the OS.
     default: jenkins
   state:
     type: str
     description:
       - Desired plugin state.
-      - If the C(latest) is set, the check for new version will be performed
+      - If set to V(latest), the check for new version will be performed
         every time. This is suitable to keep the plugin up-to-date.
     choices: [absent, present, pinned, unpinned, enabled, disabled, latest]
     default: present
@@ -59,18 +65,18 @@ options:
   updates_expiration:
     type: int
     description:
-      - Number of seconds after which a new copy of the I(update-center.json)
+      - Number of seconds after which a new copy of the C(update-center.json)
         file is downloaded. This is used to avoid the need to download the
-        plugin to calculate its checksum when C(latest) is specified.
-      - Set it to C(0) if no cache file should be used. In that case, the
+        plugin to calculate its checksum when O(state=latest) is specified.
+      - Set it to V(0) if no cache file should be used. In that case, the
         plugin file will always be downloaded to calculate its checksum when
-        C(latest) is specified.
+        O(state=latest) is specified.
     default: 86400
   updates_url:
     type: list
     elements: str
     description:
-      - A list of base URL(s) to retrieve I(update-center.json), and direct plugin files from.
+      - A list of base URL(s) to retrieve C(update-center.json), and direct plugin files from.
       - This can be a list since community.general 3.3.0.
     default: ['https://updates.jenkins.io', 'http://mirrors.jenkins.io']
   update_json_url_segment:
@@ -84,14 +90,14 @@ options:
     type: list
     elements: str
     description:
-      - Path inside the I(updates_url) to get latest plugins from.
+      - Path inside the O(updates_url) to get latest plugins from.
     default: ['latest']
     version_added: 3.3.0
   versioned_plugins_url_segments:
     type: list
     elements: str
     description:
-      - Path inside the I(updates_url) to get specific version of plugins from.
+      - Path inside the O(updates_url) to get specific version of plugins from.
     default: ['download/plugins', 'plugins']
     version_added: 3.3.0
   url:
@@ -108,11 +114,11 @@ options:
       - It might take longer to verify that the correct version is installed.
         This is especially true if a specific version number is specified.
       - Quote the version to prevent the value to be interpreted as float. For
-        example if C(1.20) would be unquoted, it would become C(1.2).
+        example if V(1.20) would be unquoted, it would become V(1.2).
   with_dependencies:
     description:
       - Defines whether to install plugin dependencies.
-      - This option takes effect only if the I(version) is not defined.
+      - This option takes effect only if the O(version) is not defined.
     type: bool
     default: true
 
@@ -121,16 +127,17 @@ notes:
     the plugin files on the disk. Only if the plugin is not installed yet and
     no version is specified, the API installation is performed which requires
     only the Web UI credentials.
-  - It's necessary to notify the handler or call the I(service) module to
+  - It is necessary to notify the handler or call the M(ansible.builtin.service) module to
     restart the Jenkins service after a new plugin was installed.
   - Pinning works only if the plugin is installed and Jenkins service was
     successfully restarted after the plugin installation.
-  - It is not possible to run the module remotely by changing the I(url)
+  - It is not possible to run the module remotely by changing the O(url)
     parameter to point to the Jenkins server. The module must be used on the
     host where Jenkins runs as it needs direct access to the plugin files.
 extends_documentation_fragment:
-  - url
-  - files
+  - ansible.builtin.url
+  - ansible.builtin.files
+  - community.general.attributes
 '''
 
 EXAMPLES = '''
@@ -187,6 +194,29 @@ EXAMPLES = '''
     url_username: admin
     url_password: p4ssw0rd
     url: http://localhost:8888
+
+#
+# Example of how to authenticate with serverless deployment
+#
+- name: Update plugins on ECS Fargate Jenkins instance
+  community.general.jenkins_plugin:
+    # plugin name and version
+    name: ws-cleanup
+    version: '0.45'
+    # Jenkins home path mounted on ec2-helper VM (example)
+    jenkins_home: "/mnt/{{ jenkins_instance }}"
+    # matching the UID/GID to one in official Jenkins image
+    owner: 1000
+    group: 1000
+    # Jenkins instance URL and admin credentials
+    url: "https://{{ jenkins_instance }}.com/"
+    url_username: admin
+    url_password: p4ssw0rd
+  # make module work from EC2 which has local access
+  # to EFS mount as well as Jenkins URL
+  delegate_to: ec2-helper
+  vars:
+    jenkins_instance: foobar
 
 #
 # Example of a Play which handles Jenkins restarts during the state changes
@@ -290,18 +320,20 @@ state:
     sample: "present"
 '''
 
+import hashlib
+import io
+import json
+import os
+import tempfile
+
 from ansible.module_utils.basic import AnsibleModule, to_bytes
 from ansible.module_utils.six.moves import http_cookiejar as cookiejar
 from ansible.module_utils.six.moves.urllib.parse import urlencode
 from ansible.module_utils.urls import fetch_url, url_argument_spec
 from ansible.module_utils.six import text_type, binary_type
 from ansible.module_utils.common.text.converters import to_native
-import hashlib
-import io
-import json
-import os
-import tempfile
-import time
+
+from ansible_collections.community.general.plugins.module_utils.jenkins import download_updates_file
 
 
 class FailedInstallingWithPluginManager(Exception):
@@ -605,21 +637,12 @@ class JenkinsPlugin(object):
         return urls
 
     def _download_updates(self):
-        updates_filename = 'jenkins-plugin-cache.json'
-        updates_dir = os.path.expanduser('~/.ansible/tmp')
-        updates_file = "%s/%s" % (updates_dir, updates_filename)
-        download_updates = True
-
-        # Check if we need to download new updates file
-        if os.path.isfile(updates_file):
-            # Get timestamp when the file was changed last time
-            ts_file = os.stat(updates_file).st_mtime
-            ts_now = time.time()
-
-            if ts_now - ts_file < self.params['updates_expiration']:
-                download_updates = False
-
-        updates_file_orig = updates_file
+        try:
+            updates_file, download_updates = download_updates_file(self.params['updates_expiration'])
+        except OSError as e:
+            self.module.fail_json(
+                msg="Cannot create temporal directory.",
+                details=to_native(e))
 
         # Download the updates file if needed
         if download_updates:
@@ -632,56 +655,41 @@ class JenkinsPlugin(object):
                 msg_exception="Updates download failed.")
 
             # Write the updates file
-            update_fd, updates_file = tempfile.mkstemp()
-            os.write(update_fd, r.read())
+            tmp_update_fd, tmp_updates_file = tempfile.mkstemp()
+            os.write(tmp_update_fd, r.read())
 
             try:
-                os.close(update_fd)
+                os.close(tmp_update_fd)
             except IOError as e:
                 self.module.fail_json(
-                    msg="Cannot close the tmp updates file %s." % updates_file,
+                    msg="Cannot close the tmp updates file %s." % tmp_updates_file,
                     details=to_native(e))
+        else:
+            tmp_updates_file = updates_file
 
         # Open the updates file
         try:
-            f = io.open(updates_file, encoding='utf-8')
+            f = io.open(tmp_updates_file, encoding='utf-8')
+
+            # Read only the second line
+            dummy = f.readline()
+            data = json.loads(f.readline())
         except IOError as e:
             self.module.fail_json(
-                msg="Cannot open temporal updates file.",
+                msg="Cannot open%s updates file." % (" temporary" if tmp_updates_file != updates_file else ""),
+                details=to_native(e))
+        except Exception as e:
+            self.module.fail_json(
+                msg="Cannot load JSON data from the%s updates file." % (" temporary" if tmp_updates_file != updates_file else ""),
                 details=to_native(e))
 
-        i = 0
-        for line in f:
-            # Read only the second line
-            if i == 1:
-                try:
-                    data = json.loads(line)
-                except Exception as e:
-                    self.module.fail_json(
-                        msg="Cannot load JSON data from the tmp updates file.",
-                        details=to_native(e))
-
-                break
-
-            i += 1
-
         # Move the updates file to the right place if we could read it
-        if download_updates:
-            # Make sure the destination directory exists
-            if not os.path.isdir(updates_dir):
-                try:
-                    os.makedirs(updates_dir, int('0700', 8))
-                except OSError as e:
-                    self.module.fail_json(
-                        msg="Cannot create temporal directory.",
-                        details=to_native(e))
-
-            self.module.atomic_move(updates_file, updates_file_orig)
+        if tmp_updates_file != updates_file:
+            self.module.atomic_move(os.path.abspath(tmp_updates_file), os.path.abspath(updates_file))
 
         # Check if we have the plugin data available
-        if 'plugins' not in data or self.params['name'] not in data['plugins']:
-            self.module.fail_json(
-                msg="Cannot find plugin data in the updates file.")
+        if not data.get('plugins', {}).get(self.params['name']):
+            self.module.fail_json(msg="Cannot find plugin data in the updates file.")
 
         return data['plugins'][self.params['name']]
 
@@ -710,7 +718,7 @@ class JenkinsPlugin(object):
                 details=to_native(e))
 
         # Move the file onto the right place
-        self.module.atomic_move(tmp_f, f)
+        self.module.atomic_move(os.path.abspath(tmp_f), os.path.abspath(f))
 
     def uninstall(self):
         changed = False

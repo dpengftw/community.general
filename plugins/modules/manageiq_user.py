@@ -14,11 +14,18 @@ module: manageiq_user
 
 short_description: Management of users in ManageIQ
 extends_documentation_fragment:
-- community.general.manageiq
+  - community.general.manageiq
+  - community.general.attributes
 
 author: Daniel Korn (@dkorn)
 description:
   - The manageiq_user module supports adding, updating and deleting users in ManageIQ.
+
+attributes:
+  check_mode:
+    support: none
+  diff_mode:
+    support: none
 
 options:
   state:
@@ -53,7 +60,7 @@ options:
     default: always
     choices: ['always', 'on_create']
     description:
-      - C(always) will update passwords unconditionally.  C(on_create) will only set the password for a newly created user.
+      - V(always) will update passwords unconditionally.  V(on_create) will only set the password for a newly created user.
 '''
 
 EXAMPLES = '''
@@ -68,7 +75,7 @@ EXAMPLES = '''
       url: 'http://127.0.0.1:3000'
       username: 'admin'
       password: 'smartvm'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 - name: Create a new user in ManageIQ using a token
   community.general.manageiq_user:
@@ -80,7 +87,7 @@ EXAMPLES = '''
     manageiq_connection:
       url: 'http://127.0.0.1:3000'
       token: 'sometoken'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 - name: Delete a user in ManageIQ
   community.general.manageiq_user:
@@ -90,7 +97,7 @@ EXAMPLES = '''
       url: 'http://127.0.0.1:3000'
       username: 'admin'
       password: 'smartvm'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 - name: Delete a user in ManageIQ using a token
   community.general.manageiq_user:
@@ -99,7 +106,7 @@ EXAMPLES = '''
     manageiq_connection:
       url: 'http://127.0.0.1:3000'
       token: 'sometoken'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 - name: Update email of user in ManageIQ
   community.general.manageiq_user:
@@ -109,7 +116,7 @@ EXAMPLES = '''
       url: 'http://127.0.0.1:3000'
       username: 'admin'
       password: 'smartvm'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 
 - name: Update email of user in ManageIQ using a token
   community.general.manageiq_user:
@@ -118,7 +125,7 @@ EXAMPLES = '''
     manageiq_connection:
       url: 'http://127.0.0.1:3000'
       token: 'sometoken'
-      validate_certs: false
+      validate_certs: false  # only do this when you trust the network!
 '''
 
 RETURN = '''

@@ -18,6 +18,13 @@ description:
 author:
     - Mathew Davies (@ThePixelDeveloper)
     - Sam Doran (@samdoran)
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: none
 options:
     name:
         description:
@@ -62,7 +69,6 @@ options:
     plugin_bin:
         description:
             - Location of the plugin binary. If this file is not found, the default plugin binaries will be used.
-            - The default changed in Ansible 2.4 to None.
         type: path
     plugin_dir:
         description:

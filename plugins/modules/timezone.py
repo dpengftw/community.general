@@ -22,10 +22,14 @@ description:
     On AIX, C(chtz) is used.
   - Make sure that the zoneinfo files are installed with the appropriate OS package, like C(tzdata) (usually always installed,
     when not using a minimal installation like Alpine Linux).
-  - As of Ansible 2.3 support was added for SmartOS and BSDs.
-  - As of Ansible 2.4 support was added for macOS.
-  - As of Ansible 2.9 support was added for AIX 6.1+
   - Windows and HPUX are not supported, please let us know if you find any other OS/distro in which this fails.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: full
 options:
   name:
     description:
@@ -45,9 +49,11 @@ options:
     aliases: [ rtc ]
     choices: [ local, UTC ]
 notes:
-  - On SmartOS the C(sm-set-timezone) utility (part of the smtools package) is required to set the zone timezone
-  - On AIX only Olson/tz database timezones are useable (POSIX is not supported).
-    - An OS reboot is also required on AIX for the new timezone setting to take effect.
+  - On Ubuntu 24.04 the C(util-linux-extra) package is required to provide the C(hwclock) command.
+  - On SmartOS the C(sm-set-timezone) utility (part of the smtools package) is required to set the zone timezone.
+  - On AIX only Olson/tz database timezones are usable (POSIX is not supported).
+    An OS reboot is also required on AIX for the new timezone setting to take effect.
+    Note that AIX 6.1+ is needed (OS level 61 or newer).
 author:
   - Shinichi TAMURA (@tmshn)
   - Jasper Lievisse Adriaanse (@jasperla)
@@ -70,6 +76,7 @@ diff:
 
 EXAMPLES = r'''
 - name: Set timezone to Asia/Tokyo
+  become: true
   community.general.timezone:
     name: Asia/Tokyo
 '''
@@ -356,6 +363,7 @@ class NosystemdTimezone(Timezone):
     def __init__(self, module):
         super(NosystemdTimezone, self).__init__(module)
         # Validate given timezone
+        planned_tz = ''
         if 'name' in self.value:
             tzfile = self._verify_timezone()
             planned_tz = self.value['name']['planned']
@@ -439,7 +447,7 @@ class NosystemdTimezone(Timezone):
             filename: The name of the file to edit.
             regexp:   The regular expression to search with.
             value:    The line which will be inserted.
-            key:      For what key the file is being editted.
+            key:      For what key the file is being edited.
         """
         # Read the file
         try:
@@ -717,7 +725,7 @@ class BSDTimezone(Timezone):
         localtime_file = '/etc/localtime'
 
         # Strategy 1:
-        #   If /etc/localtime does not exist, assum the timezone is UTC.
+        #   If /etc/localtime does not exist, assume the timezone is UTC.
         if not os.path.exists(localtime_file):
             self.module.warn('Could not read /etc/localtime. Assuming UTC.')
             return 'UTC'

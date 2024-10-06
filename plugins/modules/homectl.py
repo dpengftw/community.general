@@ -17,6 +17,19 @@ short_description: Manage user accounts with systemd-homed
 version_added: 4.4.0
 description:
     - Manages a user's home directory managed by systemd-homed.
+notes:
+    - This module does B(not) work with Python 3.13 or newer. It uses the deprecated L(crypt Python module,
+      https://docs.python.org/3.12/library/crypt.html) from the Python standard library, which was removed
+      from Python 3.13.
+requirements:
+    - Python 3.12 or earlier
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: none
 options:
     name:
         description:
@@ -30,7 +43,7 @@ options:
             - Homed requires this value to be in cleartext on user creation and updating a user.
             - The module takes the password and generates a password hash in SHA-512 with 10000 rounds of salt generation using crypt.
             - See U(https://systemd.io/USER_RECORD/).
-            - This is required for I(state=present). When an existing user is updated this is checked against the stored hash in homed.
+            - This is required for O(state=present). When an existing user is updated this is checked against the stored hash in homed.
         type: str
     state:
         description:
@@ -48,11 +61,11 @@ options:
     disksize:
         description:
             - The intended home directory disk space.
-            - Human readable value such as C(10G), C(10M), or C(10B).
+            - Human readable value such as V(10G), V(10M), or V(10B).
         type: str
     resize:
         description:
-            - When used with I(disksize) this will attempt to resize the home directory immediately.
+            - When used with O(disksize) this will attempt to resize the home directory immediately.
         default: false
         type: bool
     realname:
@@ -83,7 +96,7 @@ options:
         description:
             - Path to use as home directory for the user.
             - This is the directory the user's home directory is mounted to while the user is logged in.
-            - This is not where the user's data is actually stored, see I(imagepath) for that.
+            - This is not where the user's data is actually stored, see O(imagepath) for that.
             - Only used when a user is first created.
         type: path
     imagepath:
@@ -95,25 +108,25 @@ options:
     uid:
         description:
             - Sets the UID of the user.
-            - If using I(gid) homed requires the value to be the same.
+            - If using O(gid) homed requires the value to be the same.
             - Only used when a user is first created.
         type: int
     gid:
         description:
             - Sets the gid of the user.
-            - If using I(uid) homed requires the value to be the same.
+            - If using O(uid) homed requires the value to be the same.
             - Only used when a user is first created.
         type: int
     mountopts:
         description:
             - String separated by comma each indicating mount options for a users home directory.
-            - Valid options are C(nosuid), C(nodev) or C(noexec).
-            - Homed by default uses C(nodev) and C(nosuid) while C(noexec) is off.
+            - Valid options are V(nosuid), V(nodev) or V(noexec).
+            - Homed by default uses V(nodev) and V(nosuid) while V(noexec) is off.
         type: str
     umask:
         description:
             - Sets the umask for the user's login sessions
-            - Value from C(0000) to C(0777).
+            - Value from V(0000) to V(0777).
         type: int
     memberof:
         description:
@@ -125,13 +138,13 @@ options:
         description:
             - The absolute path to the skeleton directory to populate a new home directory from.
             - This is only used when a home directory is first created.
-            - If not specified homed by default uses C(/etc/skel).
+            - If not specified homed by default uses V(/etc/skel).
         aliases: [ 'skel' ]
         type: path
     shell:
         description:
             - Shell binary to use for terminal logins of given user.
-            - If not specified homed by default uses C(/bin/bash).
+            - If not specified homed by default uses V(/bin/bash).
         type: str
     environment:
         description:
@@ -144,7 +157,7 @@ options:
     timezone:
         description:
             - Preferred timezone to use for the user.
-            - Should be a tzdata compatible location string such as C(America/New_York).
+            - Should be a tzdata compatible location string such as V(America/New_York).
         type: str
     locked:
         description:
@@ -153,7 +166,7 @@ options:
     language:
         description:
             - The preferred language/locale for the user.
-            - This should be in a format compatible with the C($LANG) environment variable.
+            - This should be in a format compatible with the E(LANG) environment variable.
         type: str
     passwordhint:
         description:
@@ -256,11 +269,20 @@ data:
     }
 '''
 
-import crypt
 import json
-from ansible.module_utils.basic import AnsibleModule
+import traceback
+from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 from ansible.module_utils.basic import jsonify
 from ansible.module_utils.common.text.formatters import human_to_bytes
+
+try:
+    import crypt
+except ImportError:
+    HAS_CRYPT = False
+    CRYPT_IMPORT_ERROR = traceback.format_exc()
+else:
+    HAS_CRYPT = True
+    CRYPT_IMPORT_ERROR = None
 
 
 class Homectl(object):
@@ -386,7 +408,7 @@ class Homectl(object):
             user_metadata.pop('status', None)
             # Let last change Usec be updated by homed when command runs.
             user_metadata.pop('lastChangeUSec', None)
-            # Now only change fields that are called on leaving whats currently in the record intact.
+            # Now only change fields that are called on leaving what's currently in the record intact.
             record = user_metadata
 
         record['userName'] = self.name
@@ -432,7 +454,7 @@ class Homectl(object):
             self.result['changed'] = True
 
         if self.disksize:
-            # convert humand readble to bytes
+            # convert human readable to bytes
             if self.disksize != record.get('diskSize'):
                 record['diskSize'] = human_to_bytes(self.disksize)
                 self.result['changed'] = True
@@ -583,6 +605,12 @@ def main():
             ('resize', True, ['disksize']),
         ]
     )
+
+    if not HAS_CRYPT:
+        module.fail_json(
+            msg=missing_required_lib('crypt (part of Python 3.13 standard library)'),
+            exception=CRYPT_IMPORT_ERROR,
+        )
 
     homectl = Homectl(module)
     homectl.result['state'] = homectl.state

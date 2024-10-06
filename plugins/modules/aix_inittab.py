@@ -11,11 +11,18 @@ __metaclass__ = type
 DOCUMENTATION = r'''
 ---
 author:
-- Joris Weijters (@molekuul)
+    - Joris Weijters (@molekuul)
 module: aix_inittab
 short_description: Manages the inittab on AIX
 description:
     - Manages the inittab on AIX.
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   name:
     description:
@@ -185,6 +192,7 @@ def main():
     rmitab = module.get_bin_path('rmitab')
     chitab = module.get_bin_path('chitab')
     rc = 0
+    err = None
 
     # check if the new entry exists
     current_entry = check_current_entry(module)
@@ -197,7 +205,7 @@ def main():
             ":" + module.params['action'] + ":" + module.params['command']
 
         # If current entry exists or fields are different(if the entry does not
-        # exists, then the entry wil be created
+        # exists, then the entry will be created
         if (not current_entry['exist']) or (
                 module.params['runlevel'] != current_entry['runlevel'] or
                 module.params['action'] != current_entry['action'] or

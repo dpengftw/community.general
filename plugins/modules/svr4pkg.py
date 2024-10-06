@@ -21,17 +21,24 @@ description:
     - Note that this is a very basic packaging system. It will not enforce
       dependencies on install or remove.
 author: "Boyd Adamson (@brontitall)"
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   name:
     description:
-      - Package name, e.g. C(SUNWcsr)
+      - Package name, for example V(SUNWcsr).
     required: true
     type: str
 
   state:
     description:
-      - Whether to install (C(present)), or remove (C(absent)) a package.
-      - If the package is to be installed, then I(src) is required.
+      - Whether to install (V(present)), or remove (V(absent)) a package.
+      - If the package is to be installed, then O(src) is required.
       - The SVR4 package system doesn't provide an upgrade operation. You need to uninstall the old, then install the new package.
     required: true
     choices: ["present", "absent"]
@@ -39,17 +46,17 @@ options:
 
   src:
     description:
-      - Specifies the location to install the package from. Required when I(state=present).
-      - "Can be any path acceptable to the C(pkgadd) command's C(-d) option. e.g.: C(somefile.pkg), C(/dir/with/pkgs), C(http:/server/mypkgs.pkg)."
+      - Specifies the location to install the package from. Required when O(state=present).
+      - "Can be any path acceptable to the C(pkgadd) command's C(-d) option. For example: V(somefile.pkg), V(/dir/with/pkgs), V(http:/server/mypkgs.pkg)."
       - If using a file or directory, they must already be accessible by the host. See the M(ansible.builtin.copy) module for a way to get them there.
     type: str
   proxy:
     description:
-      - HTTP[s] proxy to be used if I(src) is a URL.
+      - HTTP[s] proxy to be used if O(src) is a URL.
     type: str
   response_file:
     description:
-      - Specifies the location of a response file to be used if package expects input on install. (added in Ansible 1.4)
+      - Specifies the location of a response file to be used if package expects input on install.
     required: false
     type: str
   zone:
@@ -113,7 +120,7 @@ def package_installed(module, name, category):
     if category:
         cmd.append('-c')
     cmd.append(name)
-    rc, out, err = module.run_command(' '.join(cmd))
+    rc, out, err = module.run_command(cmd)
     if rc == 0:
         return True
     else:

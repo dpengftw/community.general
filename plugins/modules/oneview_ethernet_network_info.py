@@ -13,14 +13,16 @@ module: oneview_ethernet_network_info
 short_description: Retrieve the information about one or more of the OneView Ethernet Networks
 description:
     - Retrieve the information about one or more of the Ethernet Networks from OneView.
-    - This module was called C(oneview_ethernet_network_facts) before Ansible 2.9, returning C(ansible_facts).
-      Note that the M(community.general.oneview_ethernet_network_info) module no longer returns C(ansible_facts)!
 requirements:
     - hpOneView >= 2.0.1
 author:
     - Felipe Bulsoni (@fgbulsoni)
     - Thiago Miotto (@tmiotto)
     - Adriane Cardozo (@adriane-cardozo)
+attributes:
+    check_mode:
+        version_added: 3.3.0
+        # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 options:
     name:
       description:
@@ -29,7 +31,7 @@ options:
     options:
       description:
         - "List with options to gather additional information about an Ethernet Network and related resources.
-          Options allowed: C(associatedProfiles) and C(associatedUplinkGroups)."
+          Options allowed: V(associatedProfiles) and V(associatedUplinkGroups)."
       type: list
       elements: str
 extends_documentation_fragment:

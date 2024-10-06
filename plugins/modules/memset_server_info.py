@@ -15,13 +15,16 @@ author: "Simon Weald (@glitchcrab)"
 short_description: Retrieve server information
 notes:
     - An API key generated via the Memset customer control panel is needed with the
-      following minimum scope - I(server.info).
+      following minimum scope - C(server.info).
 description:
     - Retrieve server information.
-    - This module was called C(memset_server_facts) before Ansible 2.9. The usage did not change.
 extends_documentation_fragment:
     - community.general.attributes
     - community.general.attributes.info_module
+attributes:
+    check_mode:
+        version_added: 3.3.0
+        # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 options:
     api_key:
         required: true
@@ -32,7 +35,7 @@ options:
         required: true
         type: str
         description:
-            - The server product name (i.e. C(testyaa1)).
+            - The server product name (that is, C(testyaa1)).
 '''
 
 EXAMPLES = '''
@@ -255,7 +258,10 @@ def get_facts(args=None):
         # informed of the reason.
         retvals['failed'] = has_failed
         retvals['msg'] = msg
-        retvals['stderr'] = "API returned an error: {0}" . format(response.status_code)
+        if response.status_code is not None:
+            retvals['stderr'] = "API returned an error: {0}" . format(response.status_code)
+        else:
+            retvals['stderr'] = "{0}" . format(response.stderr)
         return retvals
 
     # we don't want to return the same thing twice
@@ -282,9 +288,7 @@ def main():
     )
 
     # populate the dict with the user-provided vars.
-    args = dict()
-    for key, arg in module.params.items():
-        args[key] = arg
+    args = dict(module.params)
 
     retvals = get_facts(args)
 

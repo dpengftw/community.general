@@ -22,6 +22,11 @@ version_added: '0.2.0'
 author: Huawei Inc. (@huaweicloud)
 requirements:
     - keystoneauth1 >= 3.6.0
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: none
 options:
     state:
         description:
@@ -61,8 +66,8 @@ options:
     name:
         description:
             - Specifies the subnet name. The value is a string of 1 to 64
-              characters that can contain letters, digits, underscores C(_),
-              hyphens (-), and periods (.).
+              characters that can contain letters, digits, underscores (V(_)),
+              hyphens (V(-)), and periods (V(.)).
         type: str
         required: true
     vpc_id:
@@ -94,7 +99,8 @@ options:
         elements: str
         required: false
 extends_documentation_fragment:
-- community.general.hwc
+  - community.general.hwc
+  - community.general.attributes
 
 '''
 
@@ -131,8 +137,8 @@ RETURN = '''
     name:
         description:
             - Specifies the subnet name. The value is a string of 1 to 64
-              characters that can contain letters, digits, underscores C(_),
-              hyphens (-), and periods (.).
+              characters that can contain letters, digits, underscores (V(_)),
+              hyphens (V(-)), and periods (V(.)).
         type: str
         returned: success
     vpc_id:
@@ -434,8 +440,7 @@ def async_wait_create(config, result, client, timeout):
     path_parameters = {
         "subnet_id": ["subnet", "id"],
     }
-    data = dict((key, navigate_value(result, path))
-                for key, path in path_parameters.items())
+    data = {key: navigate_value(result, path) for key, path in path_parameters.items()}
 
     url = build_path(module, "subnets/{subnet_id}", data)
 
@@ -532,8 +537,7 @@ def async_wait_update(config, result, client, timeout):
     path_parameters = {
         "subnet_id": ["subnet", "id"],
     }
-    data = dict((key, navigate_value(result, path))
-                for key, path in path_parameters.items())
+    data = {key: navigate_value(result, path) for key, path in path_parameters.items()}
 
     url = build_path(module, "subnets/{subnet_id}", data)
 

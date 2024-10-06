@@ -24,16 +24,21 @@ description:
       to your needs and a user having the expected roles.
 
     - The names of module options are snake_cased versions of the camelCase ones found in the
-      Keycloak API and its documentation at U(https://www.keycloak.org/docs-api/15.0/rest-api/index.html).
+      Keycloak API and its documentation at U(https://www.keycloak.org/docs-api/20.0.2/rest-api/index.html).
 
+attributes:
+    check_mode:
+        support: full
+    diff_mode:
+        support: full
 
 options:
     state:
         description:
             - State of the user federation.
-            - On C(present), the user federation will be created if it does not yet exist, or updated with
+            - On V(present), the user federation will be created if it does not yet exist, or updated with
               the parameters you provide.
-            - On C(absent), the user federation will be removed if it exists.
+            - On V(absent), the user federation will be removed if it exists.
         default: 'present'
         type: str
         choices:
@@ -49,7 +54,7 @@ options:
     id:
         description:
             - The unique ID for this user federation. If left empty, the user federation will be searched
-              by its I(name).
+              by its O(name).
         type: str
 
     name:
@@ -59,18 +64,15 @@ options:
 
     provider_id:
         description:
-            - Provider for this user federation.
+            - Provider for this user federation. Built-in providers are V(ldap), V(kerberos), and V(sssd).
+              Custom user storage providers can also be used.
         aliases:
             - providerId
         type: str
-        choices:
-            - ldap
-            - kerberos
-            - sssd
 
     provider_type:
         description:
-            - Component type for user federation (only supported value is C(org.keycloak.storage.UserStorageProvider)).
+            - Component type for user federation (only supported value is V(org.keycloak.storage.UserStorageProvider)).
         aliases:
             - providerType
         default: org.keycloak.storage.UserStorageProvider
@@ -83,13 +85,21 @@ options:
             - parentId
         type: str
 
+    remove_unspecified_mappers:
+        description:
+            - Remove mappers that are not specified in the configuration for this federation.
+            - Set to V(false) to keep mappers that are not listed in O(mappers).
+        type: bool
+        default: true
+        version_added: 9.4.0
+
     config:
         description:
             - Dict specifying the configuration options for the provider; the contents differ depending on
-              the value of I(provider_id). Examples are given below for C(ldap), C(kerberos) and C(sssd).
+              the value of O(provider_id). Examples are given below for V(ldap), V(kerberos) and V(sssd).
               It is easiest to obtain valid config values by dumping an already-existing user federation
-              configuration through check-mode in the I(existing) field.
-            - The value C(sssd) has been supported since community.general 4.2.0.
+              configuration through check-mode in the RV(existing) field.
+            - The value V(sssd) has been supported since community.general 4.2.0.
         type: dict
         suboptions:
             enabled:
@@ -106,15 +116,15 @@ options:
 
             importEnabled:
                 description:
-                    - If C(true), LDAP users will be imported into Keycloak DB and synced by the configured
+                    - If V(true), LDAP users will be imported into Keycloak DB and synced by the configured
                       sync policies.
                 default: true
                 type: bool
 
             editMode:
                 description:
-                    - C(READ_ONLY) is a read-only LDAP store. C(WRITABLE) means data will be synced back to LDAP
-                      on demand. C(UNSYNCED) means user data will be imported, but not synced back to LDAP.
+                    - V(READ_ONLY) is a read-only LDAP store. V(WRITABLE) means data will be synced back to LDAP
+                      on demand. V(UNSYNCED) means user data will be imported, but not synced back to LDAP.
                 type: str
                 choices:
                     - READ_ONLY
@@ -131,13 +141,13 @@ options:
             vendor:
                 description:
                     - LDAP vendor (provider).
-                    - Use short name. For instance, write C(rhds) for "Red Hat Directory Server".
+                    - Use short name. For instance, write V(rhds) for "Red Hat Directory Server".
                 type: str
 
             usernameLDAPAttribute:
                 description:
                     - Name of LDAP attribute, which is mapped as Keycloak username. For many LDAP server
-                      vendors it can be C(uid). For Active directory it can be C(sAMAccountName) or C(cn).
+                      vendors it can be V(uid). For Active directory it can be V(sAMAccountName) or V(cn).
                       The attribute should be filled for all LDAP user records you want to import from
                       LDAP to Keycloak.
                 type: str
@@ -146,15 +156,15 @@ options:
                 description:
                     - Name of LDAP attribute, which is used as RDN (top attribute) of typical user DN.
                       Usually it's the same as Username LDAP attribute, however it is not required. For
-                      example for Active directory, it is common to use C(cn) as RDN attribute when
-                      username attribute might be C(sAMAccountName).
+                      example for Active directory, it is common to use V(cn) as RDN attribute when
+                      username attribute might be V(sAMAccountName).
                 type: str
 
             uuidLDAPAttribute:
                 description:
                     - Name of LDAP attribute, which is used as unique object identifier (UUID) for objects
-                      in LDAP. For many LDAP server vendors, it is C(entryUUID); however some are different.
-                      For example for Active directory it should be C(objectGUID). If your LDAP server does
+                      in LDAP. For many LDAP server vendors, it is V(entryUUID); however some are different.
+                      For example for Active directory it should be V(objectGUID). If your LDAP server does
                       not support the notion of UUID, you can use any other attribute that is supposed to
                       be unique among LDAP users in tree.
                 type: str
@@ -162,7 +172,7 @@ options:
             userObjectClasses:
                 description:
                     - All values of LDAP objectClass attribute for users in LDAP divided by comma.
-                      For example C(inetOrgPerson, organizationalPerson). Newly created Keycloak users
+                      For example V(inetOrgPerson, organizationalPerson). Newly created Keycloak users
                       will be written to LDAP with all those object classes and existing LDAP user records
                       are found just if they contain all those object classes.
                 type: str
@@ -246,8 +256,8 @@ options:
             useTruststoreSpi:
                 description:
                     - Specifies whether LDAP connection will use the truststore SPI with the truststore
-                      configured in standalone.xml/domain.xml. C(Always) means that it will always use it.
-                      C(Never) means that it will not use it. C(Only for ldaps) means that it will use if
+                      configured in standalone.xml/domain.xml. V(always) means that it will always use it.
+                      V(never) means that it will not use it. V(ldapsOnly) means that it will use if
                       your connection URL use ldaps. Note even if standalone.xml/domain.xml is not
                       configured, the default Java cacerts or certificate specified by
                       C(javax.net.ssl.trustStore) property will be used.
@@ -292,7 +302,7 @@ options:
             connectionPoolingDebug:
                 description:
                     - A string that indicates the level of debug output to produce. Example valid values are
-                      C(fine) (trace connection creation and removal) and C(all) (all debugging information).
+                      V(fine) (trace connection creation and removal) and V(all) (all debugging information).
                 type: str
 
             connectionPoolingInitSize:
@@ -316,7 +326,7 @@ options:
             connectionPoolingProtocol:
                 description:
                     - A list of space-separated protocol types of connections that may be pooled.
-                      Valid types are C(plain) and C(ssl).
+                      Valid types are V(plain) and V(ssl).
                 type: str
 
             connectionPoolingTimeout:
@@ -337,17 +347,27 @@ options:
                     - Name of kerberos realm.
                 type: str
 
+            krbPrincipalAttribute:
+                description:
+                    - Name of the LDAP attribute, which refers to Kerberos principal.
+                      This is used to lookup appropriate LDAP user after successful Kerberos/SPNEGO authentication in Keycloak.
+                      When this is empty, the LDAP user will be looked based on LDAP username corresponding
+                      to the first part of his Kerberos principal. For instance, for principal C(john@KEYCLOAK.ORG),
+                      it will assume that LDAP username is V(john).
+                type: str
+                version_added: 8.1.0
+
             serverPrincipal:
                 description:
                     - Full name of server principal for HTTP service including server and domain name. For
-                      example C(HTTP/host.foo.org@FOO.ORG). Use C(*) to accept any service principal in the
+                      example V(HTTP/host.foo.org@FOO.ORG). Use V(*) to accept any service principal in the
                       KeyTab file.
                 type: str
 
             keyTab:
                 description:
                     - Location of Kerberos KeyTab file containing the credentials of server principal. For
-                      example C(/etc/krb5.keytab).
+                      example V(/etc/krb5.keytab).
                 type: str
 
             debug:
@@ -446,22 +466,25 @@ options:
 
             providerId:
                 description:
-                    - The mapper type for this mapper (for instance C(user-attribute-ldap-mapper)).
+                    - The mapper type for this mapper (for instance V(user-attribute-ldap-mapper)).
                 type: str
 
             providerType:
                 description:
-                    - Component type for this mapper (only supported value is C(org.keycloak.storage.ldap.mappers.LDAPStorageMapper)).
+                    - Component type for this mapper.
                 type: str
+                default: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
 
             config:
                 description:
                     - Dict specifying the configuration options for the mapper; the contents differ
                       depending on the value of I(identityProviderMapper).
+                    # TODO: what is identityProviderMapper above???
                 type: dict
 
 extends_documentation_fragment:
-- community.general.keycloak
+    - community.general.keycloak
+    - community.general.attributes
 
 author:
     - Laurent Paumier (@laurpaum)
@@ -698,16 +721,27 @@ from ansible.module_utils.six.moves.urllib.parse import urlencode
 from copy import deepcopy
 
 
+def normalize_kc_comp(comp):
+    if 'config' in comp:
+        # kc completely removes the parameter `krbPrincipalAttribute` if it is set to `''`; the unset kc parameter is equivalent to `''`;
+        # to make change detection and diff more accurate we set it again in the kc responses
+        if 'krbPrincipalAttribute' not in comp['config']:
+            comp['config']['krbPrincipalAttribute'] = ['']
+
+        # kc stores a timestamp of the last sync in `lastSync` to time the periodic sync, it is removed to minimize diff/changes
+        comp['config'].pop('lastSync', None)
+
+
 def sanitize(comp):
     compcopy = deepcopy(comp)
     if 'config' in compcopy:
-        compcopy['config'] = dict((k, v[0]) for k, v in compcopy['config'].items())
+        compcopy['config'] = {k: v[0] for k, v in compcopy['config'].items()}
         if 'bindCredential' in compcopy['config']:
             compcopy['config']['bindCredential'] = '**********'
     if 'mappers' in compcopy:
         for mapper in compcopy['mappers']:
             if 'config' in mapper:
-                mapper['config'] = dict((k, v[0]) for k, v in mapper['config'].items())
+                mapper['config'] = {k: v[0] for k, v in mapper['config'].items()}
     return compcopy
 
 
@@ -756,6 +790,7 @@ def main():
         readTimeout=dict(type='int'),
         searchScope=dict(type='str', choices=['1', '2'], default='1'),
         serverPrincipal=dict(type='str'),
+        krbPrincipalAttribute=dict(type='str'),
         startTls=dict(type='bool', default=False),
         syncRegistrations=dict(type='bool', default=False),
         trustEmail=dict(type='bool', default=False),
@@ -776,7 +811,7 @@ def main():
         name=dict(type='str'),
         parentId=dict(type='str'),
         providerId=dict(type='str'),
-        providerType=dict(type='str'),
+        providerType=dict(type='str', default='org.keycloak.storage.ldap.mappers.LDAPStorageMapper'),
         config=dict(type='dict'),
     )
 
@@ -786,9 +821,10 @@ def main():
         realm=dict(type='str', default='master'),
         id=dict(type='str'),
         name=dict(type='str'),
-        provider_id=dict(type='str', aliases=['providerId'], choices=['ldap', 'kerberos', 'sssd']),
+        provider_id=dict(type='str', aliases=['providerId']),
         provider_type=dict(type='str', aliases=['providerType'], default='org.keycloak.storage.UserStorageProvider'),
         parent_id=dict(type='str', aliases=['parentId']),
+        remove_unspecified_mappers=dict(type='bool', default=True),
         mappers=dict(type='list', elements='dict', options=mapper_spec),
     )
 
@@ -819,23 +855,29 @@ def main():
 
     # Keycloak API expects config parameters to be arrays containing a single string element
     if config is not None:
-        module.params['config'] = dict((k, [str(v).lower() if not isinstance(v, str) else v])
-                                       for k, v in config.items() if config[k] is not None)
+        module.params['config'] = {
+            k: [str(v).lower() if not isinstance(v, str) else v]
+            for k, v in config.items()
+            if config[k] is not None
+        }
 
     if mappers is not None:
         for mapper in mappers:
             if mapper.get('config') is not None:
-                mapper['config'] = dict((k, [str(v).lower() if not isinstance(v, str) else v])
-                                        for k, v in mapper['config'].items() if mapper['config'][k] is not None)
+                mapper['config'] = {
+                    k: [str(v).lower() if not isinstance(v, str) else v]
+                    for k, v in mapper['config'].items()
+                    if mapper['config'][k] is not None
+                }
 
     # Filter and map the parameters names that apply
     comp_params = [x for x in module.params
-                   if x not in list(keycloak_argument_spec().keys()) + ['state', 'realm', 'mappers'] and
+                   if x not in list(keycloak_argument_spec().keys()) + ['state', 'realm', 'mappers', 'remove_unspecified_mappers'] and
                    module.params.get(x) is not None]
 
     # See if it already exists in Keycloak
     if cid is None:
-        found = kc.get_components(urlencode(dict(type='org.keycloak.storage.UserStorageProvider', parent=realm, name=name)), realm)
+        found = kc.get_components(urlencode(dict(type='org.keycloak.storage.UserStorageProvider', name=name)), realm)
         if len(found) > 1:
             module.fail_json(msg='No ID given and found multiple user federations with name `{name}`. Cannot continue.'.format(name=name))
         before_comp = next(iter(found), None)
@@ -849,7 +891,9 @@ def main():
 
     # if user federation exists, get associated mappers
     if cid is not None and before_comp:
-        before_comp['mappers'] = sorted(kc.get_components(urlencode(dict(parent=cid)), realm), key=lambda x: x.get('name'))
+        before_comp['mappers'] = sorted(kc.get_components(urlencode(dict(parent=cid)), realm), key=lambda x: x.get('name') or '')
+
+    normalize_kc_comp(before_comp)
 
     # Build a proposed changeset from parameters given to this module
     changeset = {}
@@ -858,7 +902,7 @@ def main():
         new_param_value = module.params.get(param)
         old_value = before_comp[camel(param)] if camel(param) in before_comp else None
         if param == 'mappers':
-            new_param_value = [dict((k, v) for k, v in x.items() if x[k] is not None) for x in new_param_value]
+            new_param_value = [{k: v for k, v in x.items() if v is not None} for x in new_param_value]
         if new_param_value != old_value:
             changeset[camel(param)] = new_param_value
 
@@ -867,17 +911,17 @@ def main():
         if module.params['provider_id'] in ['kerberos', 'sssd']:
             module.fail_json(msg='Cannot configure mappers for {type} provider.'.format(type=module.params['provider_id']))
         for change in module.params['mappers']:
-            change = dict((k, v) for k, v in change.items() if change[k] is not None)
+            change = {k: v for k, v in change.items() if v is not None}
             if change.get('id') is None and change.get('name') is None:
                 module.fail_json(msg='Either `name` or `id` has to be specified on each mapper.')
             if cid is None:
                 old_mapper = {}
             elif change.get('id') is not None:
-                old_mapper = kc.get_component(change['id'], realm)
+                old_mapper = next((before_mapper for before_mapper in before_comp.get('mappers', []) if before_mapper["id"] == change['id']), None)
                 if old_mapper is None:
                     old_mapper = {}
             else:
-                found = kc.get_components(urlencode(dict(parent=cid, name=change['name'])), realm)
+                found = [before_mapper for before_mapper in before_comp.get('mappers', []) if before_mapper['name'] == change['name']]
                 if len(found) > 1:
                     module.fail_json(msg='Found multiple mappers with name `{name}`. Cannot continue.'.format(name=change['name']))
                 if len(found) == 1:
@@ -886,10 +930,16 @@ def main():
                     old_mapper = {}
             new_mapper = old_mapper.copy()
             new_mapper.update(change)
-            if new_mapper != old_mapper:
-                if changeset.get('mappers') is None:
-                    changeset['mappers'] = list()
-                changeset['mappers'].append(new_mapper)
+            # changeset contains all desired mappers: those existing, to update or to create
+            if changeset.get('mappers') is None:
+                changeset['mappers'] = list()
+            changeset['mappers'].append(new_mapper)
+        changeset['mappers'] = sorted(changeset['mappers'], key=lambda x: x.get('name') or '')
+
+        # to keep unspecified existing mappers we add them to the desired mappers list, unless they're already present
+        if not module.params['remove_unspecified_mappers'] and 'mappers' in before_comp:
+            changeset_mapper_ids = [mapper['id'] for mapper in changeset['mappers'] if 'id' in mapper]
+            changeset['mappers'].extend([mapper for mapper in before_comp['mappers'] if mapper['id'] not in changeset_mapper_ids])
 
     # Prepare the desired values using the existing values (non-existence results in a dict that is save to use as a basis)
     desired_comp = before_comp.copy()
@@ -912,40 +962,53 @@ def main():
         # Process a creation
         result['changed'] = True
 
-        if module._diff:
-            result['diff'] = dict(before='', after=sanitize(desired_comp))
-
         if module.check_mode:
+            if module._diff:
+                result['diff'] = dict(before='', after=sanitize(desired_comp))
             module.exit_json(**result)
 
         # create it
-        desired_comp = desired_comp.copy()
-        updated_mappers = desired_comp.pop('mappers', [])
+        desired_mappers = desired_comp.pop('mappers', [])
         after_comp = kc.create_component(desired_comp, realm)
+        cid = after_comp['id']
+        updated_mappers = []
+        # when creating a user federation, keycloak automatically creates default mappers
+        default_mappers = kc.get_components(urlencode(dict(parent=cid)), realm)
 
-        for mapper in updated_mappers:
-            found = kc.get_components(urlencode(dict(parent=cid, name=mapper['name'])), realm)
+        # create new mappers or update existing default mappers
+        for desired_mapper in desired_mappers:
+            found = [default_mapper for default_mapper in default_mappers if default_mapper['name'] == desired_mapper['name']]
             if len(found) > 1:
-                module.fail_json(msg='Found multiple mappers with name `{name}`. Cannot continue.'.format(name=mapper['name']))
+                module.fail_json(msg='Found multiple mappers with name `{name}`. Cannot continue.'.format(name=desired_mapper['name']))
             if len(found) == 1:
                 old_mapper = found[0]
             else:
                 old_mapper = {}
 
             new_mapper = old_mapper.copy()
-            new_mapper.update(mapper)
+            new_mapper.update(desired_mapper)
 
             if new_mapper.get('id') is not None:
                 kc.update_component(new_mapper, realm)
+                updated_mappers.append(new_mapper)
             else:
                 if new_mapper.get('parentId') is None:
-                    new_mapper['parentId'] = after_comp['id']
-                mapper = kc.create_component(new_mapper, realm)
+                    new_mapper['parentId'] = cid
+                updated_mappers.append(kc.create_component(new_mapper, realm))
 
-        after_comp['mappers'] = updated_mappers
+        if module.params['remove_unspecified_mappers']:
+            # we remove all unwanted default mappers
+            # we use ids so we dont accidently remove one of the previously updated default mapper
+            for default_mapper in default_mappers:
+                if not default_mapper['id'] in [x['id'] for x in updated_mappers]:
+                    kc.delete_component(default_mapper['id'], realm)
+
+        after_comp['mappers'] = kc.get_components(urlencode(dict(parent=cid)), realm)
+        normalize_kc_comp(after_comp)
+        if module._diff:
+            result['diff'] = dict(before='', after=sanitize(after_comp))
         result['end_state'] = sanitize(after_comp)
-
-        result['msg'] = "User federation {id} has been created".format(id=after_comp['id'])
+        result['msg'] = "User federation {id} has been created".format(id=cid)
         module.exit_json(**result)
 
     else:
@@ -969,22 +1032,33 @@ def main():
                 module.exit_json(**result)
 
             # do the update
-            desired_comp = desired_comp.copy()
-            updated_mappers = desired_comp.pop('mappers', [])
+            desired_mappers = desired_comp.pop('mappers', [])
             kc.update_component(desired_comp, realm)
-            after_comp = kc.get_component(cid, realm)
 
-            for mapper in updated_mappers:
+            for before_mapper in before_comp.get('mappers', []):
+                # remove unwanted existing mappers that will not be updated
+                if not before_mapper['id'] in [x['id'] for x in desired_mappers if 'id' in x]:
+                    kc.delete_component(before_mapper['id'], realm)
+
+            for mapper in desired_mappers:
+                if mapper in before_comp.get('mappers', []):
+                    continue
                 if mapper.get('id') is not None:
                     kc.update_component(mapper, realm)
                 else:
                     if mapper.get('parentId') is None:
                         mapper['parentId'] = desired_comp['id']
-                    mapper = kc.create_component(mapper, realm)
+                    kc.create_component(mapper, realm)
 
-            after_comp['mappers'] = updated_mappers
-            result['end_state'] = sanitize(after_comp)
-
+            after_comp = kc.get_component(cid, realm)
+            after_comp['mappers'] = sorted(kc.get_components(urlencode(dict(parent=cid)), realm), key=lambda x: x.get('name') or '')
+            normalize_kc_comp(after_comp)
+            after_comp_sanitized = sanitize(after_comp)
+            before_comp_sanitized = sanitize(before_comp)
+            result['end_state'] = after_comp_sanitized
+            if module._diff:
+                result['diff'] = dict(before=before_comp_sanitized, after=after_comp_sanitized)
+            result['changed'] = before_comp_sanitized != after_comp_sanitized
             result['msg'] = "User federation {id} has been updated".format(id=cid)
             module.exit_json(**result)
 

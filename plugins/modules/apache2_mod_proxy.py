@@ -20,6 +20,13 @@ description:
     status page has to be enabled and accessible, as this module relies on parsing
     this page. This module supports ansible check_mode, and requires BeautifulSoup
     python module.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   balancer_url_suffix:
     type: str
@@ -270,7 +277,7 @@ class BalancerMember(object):
                 for valuesset in subsoup[1::1]:
                     if re.search(pattern=self.host, string=str(valuesset)):
                         values = valuesset.findAll('td')
-                        return dict((keys[x].string, values[x].string) for x in range(0, len(keys)))
+                        return {keys[x].string: values[x].string for x in range(0, len(keys))}
 
     def get_member_status(self):
         """ Returns a dictionary of a balancer member's status attributes."""
@@ -279,7 +286,7 @@ class BalancerMember(object):
                           'hot_standby': 'Stby',
                           'ignore_errors': 'Ign'}
         actual_status = str(self.attributes['Status'])
-        status = dict((mode, patt in actual_status) for mode, patt in iteritems(status_mapping))
+        status = {mode: patt in actual_status for mode, patt in iteritems(status_mapping)}
         return status
 
     def set_member_status(self, values):

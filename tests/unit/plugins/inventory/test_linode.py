@@ -16,7 +16,7 @@ mandatory_py_version = pytest.mark.skipif(
 )
 
 
-from ansible.errors import AnsibleError, AnsibleParserError
+from ansible.errors import AnsibleError
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 from ansible_collections.community.general.plugins.inventory.linode import InventoryModule
@@ -37,11 +37,25 @@ def test_missing_access_token_lookup(inventory):
         assert 'Could not retrieve Linode access token' in error_message
 
 
-def test_verify_file(tmp_path, inventory):
+def test_verify_file_yml(tmp_path, inventory):
     file = tmp_path / "foobar.linode.yml"
     file.touch()
     assert inventory.verify_file(str(file)) is True
 
 
+def test_verify_file_yaml(tmp_path, inventory):
+    file = tmp_path / "foobar.linode.yaml"
+    file.touch()
+    assert inventory.verify_file(str(file)) is True
+
+
+def test_verify_file_bad_config_yml(inventory):
+    assert inventory.verify_file("foobar.linode.yml") is False
+
+
+def test_verify_file_bad_config_yaml(inventory):
+    assert inventory.verify_file("foobar.linode.yaml") is False
+
+
 def test_verify_file_bad_config(inventory):
-    assert inventory.verify_file('foobar.linode.yml') is False
+    assert inventory.verify_file("foobar.wrongcloud.yml") is False

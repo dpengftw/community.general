@@ -27,18 +27,24 @@ author:
   - Lennert Mertens (@LennertMertens)
   - Stef Graces (@stgrace)
 requirements:
-  - python >= 2.7
   - python-gitlab python module
   - administrator rights on the GitLab server
 extends_documentation_fragment:
   - community.general.auth_basic
   - community.general.gitlab
+  - community.general.attributes
+
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 
 options:
   name:
     description:
       - Name of the user you want to create.
-      - Required only if C(state) is set to C(present).
+      - Required only if O(state=present).
     type: str
   username:
     description:
@@ -59,7 +65,7 @@ options:
   email:
     description:
       - The email that belongs to the user.
-      - Required only if C(state) is set to C(present).
+      - Required only if O(state=present).
     type: str
   sshkey_name:
     description:
@@ -116,7 +122,7 @@ options:
   identities:
     description:
       - List of identities to be added/updated for this user.
-      - To remove all other identities from this user, set I(overwrite_identities=true).
+      - To remove all other identities from this user, set O(overwrite_identities=true).
     type: list
     elements: dict
     suboptions:
@@ -132,8 +138,8 @@ options:
   overwrite_identities:
     description:
       - Overwrite identities with identities added in this module.
-      - This means that all identities that the user has and that are not listed in I(identities) are removed from the user.
-      - This is only done if a list is provided for I(identities). To remove all identities, provide an empty list.
+      - This means that all identities that the user has and that are not listed in O(identities) are removed from the user.
+      - This is only done if a list is provided for O(identities). To remove all identities, provide an empty list.
     type: bool
     default: false
     version_added: 3.3.0
@@ -144,7 +150,6 @@ EXAMPLES = '''
   community.general.gitlab_user:
     api_url: https://gitlab.example.com/
     api_token: "{{ access_token }}"
-    validate_certs: false
     username: myusername
     state: absent
 
@@ -184,7 +189,6 @@ EXAMPLES = '''
   community.general.gitlab_user:
     api_url: https://gitlab.example.com/
     api_token: "{{ access_token }}"
-    validate_certs: false
     username: myusername
     state: blocked
 
@@ -192,7 +196,6 @@ EXAMPLES = '''
   community.general.gitlab_user:
     api_url: https://gitlab.example.com/
     api_token: "{{ access_token }}"
-    validate_certs: false
     username: myusername
     state: unblocked
 '''
@@ -227,7 +230,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_native
 
 from ansible_collections.community.general.plugins.module_utils.gitlab import (
-    auth_argument_spec, find_group, gitlab_authentication, gitlab, ensure_gitlab_package
+    auth_argument_spec, find_group, gitlab_authentication, gitlab, list_all_kwargs
 )
 
 
@@ -237,12 +240,12 @@ class GitLabUser(object):
         self._gitlab = gitlab_instance
         self.user_object = None
         self.ACCESS_LEVEL = {
-            'guest': gitlab.GUEST_ACCESS,
-            'reporter': gitlab.REPORTER_ACCESS,
-            'developer': gitlab.DEVELOPER_ACCESS,
-            'master': gitlab.MAINTAINER_ACCESS,
-            'maintainer': gitlab.MAINTAINER_ACCESS,
-            'owner': gitlab.OWNER_ACCESS,
+            'guest': gitlab.const.GUEST_ACCESS,
+            'reporter': gitlab.const.REPORTER_ACCESS,
+            'developer': gitlab.const.DEVELOPER_ACCESS,
+            'master': gitlab.const.MAINTAINER_ACCESS,
+            'maintainer': gitlab.const.MAINTAINER_ACCESS,
+            'owner': gitlab.const.OWNER_ACCESS,
         }
 
     '''
@@ -342,9 +345,10 @@ class GitLabUser(object):
     @param sshkey_name Name of the ssh key
     '''
     def ssh_key_exists(self, user, sshkey_name):
-        keyList = map(lambda k: k.title, user.keys.list(all=True))
-
-        return sshkey_name in keyList
+        return any(
+            k.title == sshkey_name
+            for k in user.keys.list(**list_all_kwargs)
+        )
 
     '''
     @param user User object
@@ -478,7 +482,7 @@ class GitLabUser(object):
 
     '''
     @param user User object
-    @param identites List of identities to be added/updated
+    @param identities List of identities to be added/updated
     @param overwrite_identities Overwrite user identities with identities passed to this module
     '''
     def add_identities(self, user, identities, overwrite_identities=False):
@@ -497,7 +501,7 @@ class GitLabUser(object):
 
     '''
     @param user User object
-    @param identites List of identities to be added/updated
+    @param identities List of identities to be added/updated
     '''
     def delete_identities(self, user, identities):
         changed = False
@@ -512,10 +516,13 @@ class GitLabUser(object):
     @param username Username of the user
     '''
     def find_user(self, username):
-        users = self._gitlab.users.list(search=username, all=True)
-        for user in users:
-            if (user.username == username):
-                return user
+        return next(
+            (
+                user for user in self._gitlab.users.list(search=username, **list_all_kwargs)
+                if user.username == username
+            ),
+            None
+        )
 
     '''
     @param username Username of the user
@@ -609,7 +616,9 @@ def main():
             ('state', 'present', ['name', 'email']),
         )
     )
-    ensure_gitlab_package(module)
+
+    # check prerequisites and connect to gitlab server
+    gitlab_instance = gitlab_authentication(module)
 
     user_name = module.params['name']
     state = module.params['state']
@@ -627,8 +636,6 @@ def main():
     user_external = module.params['external']
     user_identities = module.params['identities']
     overwrite_identities = module.params['overwrite_identities']
-
-    gitlab_instance = gitlab_authentication(module)
 
     gitlab_user = GitLabUser(module, gitlab_instance)
     user_exists = gitlab_user.exists_user(user_username)

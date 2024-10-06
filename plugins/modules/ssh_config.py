@@ -8,6 +8,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
 
 DOCUMENTATION = r'''
@@ -20,6 +21,13 @@ description:
 author:
     - Björn Andersson (@gaqzi)
     - Abhijeet Kasurde (@Akasurde)
+extends_documentation_fragment:
+    - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   state:
     description:
@@ -30,20 +38,20 @@ options:
   user:
     description:
       - Which user account this configuration file belongs to.
-      - If none given and I(ssh_config_file) is not specified, C(/etc/ssh/ssh_config) is used.
+      - If none given and O(ssh_config_file) is not specified, C(/etc/ssh/ssh_config) is used.
       - If a user is given, C(~/.ssh/config) is used.
-      - Mutually exclusive with I(ssh_config_file).
+      - Mutually exclusive with O(ssh_config_file).
     type: str
   group:
     description:
       - Which group this configuration file belongs to.
-      - If none given, I(user) is used.
+      - If none given, O(user) is used.
     type: str
   host:
     description:
       - The endpoint this configuration is valid for.
       - Can be an actual address on the internet or an alias that will
-        connect to the value of I(hostname).
+        connect to the value of O(hostname).
     required: true
     type: str
   hostname:
@@ -62,8 +70,17 @@ options:
     description:
       - The path to an identity file (SSH private key) that will be used
         when connecting to this host.
-      - File need to exist and have mode C(0600) to be valid.
+      - File need to exist and have mode V(0600) to be valid.
     type: path
+  identities_only:
+    description:
+      - Specifies that SSH should only use the configured authentication
+        identity and certificate files (either the default files, or
+        those explicitly configured in the C(ssh_config) files or passed on
+        the ssh command-line), even if ssh-agent or a PKCS11Provider or
+        SecurityKeyProvider offers more identities.
+    type: bool
+    version_added: 8.2.0
   user_known_hosts_file:
     description:
       - Sets the user known hosts file option.
@@ -71,27 +88,59 @@ options:
   strict_host_key_checking:
     description:
       - Whether to strictly check the host key when doing connections to the remote host.
-    choices: [ 'yes', 'no', 'ask' ]
+      - The value V(accept-new) is supported since community.general 8.6.0.
+    choices: [ 'yes', 'no', 'ask', 'accept-new' ]
     type: str
   proxycommand:
     description:
       - Sets the C(ProxyCommand) option.
+      - Mutually exclusive with O(proxyjump).
     type: str
+  proxyjump:
+    description:
+      - Sets the C(ProxyJump) option.
+      - Mutually exclusive with O(proxycommand).
+    type: str
+    version_added: 6.5.0
   forward_agent:
     description:
       - Sets the C(ForwardAgent) option.
     type: bool
     version_added: 4.0.0
+  add_keys_to_agent:
+    description:
+      - Sets the C(AddKeysToAgent) option.
+    type: bool
+    version_added: 8.2.0
   ssh_config_file:
     description:
       - SSH config file.
-      - If I(user) and this option are not specified, C(/etc/ssh/ssh_config) is used.
-      - Mutually exclusive with I(user).
+      - If O(user) and this option are not specified, C(/etc/ssh/ssh_config) is used.
+      - Mutually exclusive with O(user).
     type: path
+  host_key_algorithms:
+    description:
+      - Sets the C(HostKeyAlgorithms) option.
+    type: str
+    version_added: 6.1.0
+  controlmaster:
+    description:
+      - Sets the C(ControlMaster) option.
+    choices: [ 'yes', 'no', 'ask', 'auto', 'autoask' ]
+    type: str
+    version_added: 8.1.0
+  controlpath:
+    description:
+      - Sets the C(ControlPath) option.
+    type: str
+    version_added: 8.1.0
+  controlpersist:
+    description:
+      - Sets the C(ControlPersist) option.
+    type: str
+    version_added: 8.1.0
 requirements:
-- StormSSH
-notes:
-- Supports check mode.
+- paramiko
 '''
 
 EXAMPLES = r'''
@@ -150,25 +199,36 @@ hosts_change_diff:
 '''
 
 import os
-import traceback
 
 from copy import deepcopy
 
-STORM_IMP_ERR = None
-try:
-    from storm.parsers.ssh_config_parser import ConfigParser
-    HAS_STORM = True
-except ImportError:
-    HAS_STORM = False
-    STORM_IMP_ERR = traceback.format_exc()
-
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 from ansible.module_utils.common.text.converters import to_native
+from ansible_collections.community.general.plugins.module_utils._stormssh import ConfigParser, HAS_PARAMIKO, PARAMIKO_IMPORT_ERROR
+from ansible_collections.community.general.plugins.module_utils.ssh import determine_config_file
 
 
-class SSHConfig():
+def convert_bool(value):
+    if value is True:
+        return 'yes'
+    if value is False:
+        return 'no'
+    return None
+
+
+def fix_bool_str(value):
+    if value == 'True':
+        return 'yes'
+    if value == 'False':
+        return 'no'
+    return value
+
+
+class SSHConfig(object):
     def __init__(self, module):
         self.module = module
+        if not HAS_PARAMIKO:
+            module.fail_json(msg=missing_required_lib('PARAMIKO'), exception=PARAMIKO_IMPORT_ERROR)
         self.params = module.params
         self.user = self.params.get('user')
         self.group = self.params.get('group') or self.user
@@ -183,10 +243,7 @@ class SSHConfig():
         self.config.load()
 
     def check_ssh_config_path(self):
-        if self.user:
-            self.config_file = os.path.join(os.path.expanduser('~%s' % self.user), '.ssh', 'config')
-        elif self.config_file is None:
-            self.config_file = '/etc/ssh/ssh_config'
+        self.config_file = determine_config_file(self.user, self.config_file)
 
         # See if the identity file exists or not, relative to the config file
         if os.path.exists(self.config_file) and self.identity_file is not None:
@@ -203,17 +260,19 @@ class SSHConfig():
             hostname=self.params.get('hostname'),
             port=self.params.get('port'),
             identity_file=self.params.get('identity_file'),
+            identities_only=convert_bool(self.params.get('identities_only')),
             user=self.params.get('remote_user'),
             strict_host_key_checking=self.params.get('strict_host_key_checking'),
             user_known_hosts_file=self.params.get('user_known_hosts_file'),
             proxycommand=self.params.get('proxycommand'),
+            proxyjump=self.params.get('proxyjump'),
+            host_key_algorithms=self.params.get('host_key_algorithms'),
+            forward_agent=convert_bool(self.params.get('forward_agent')),
+            add_keys_to_agent=convert_bool(self.params.get('add_keys_to_agent')),
+            controlmaster=self.params.get('controlmaster'),
+            controlpath=self.params.get('controlpath'),
+            controlpersist=fix_bool_str(self.params.get('controlpersist')),
         )
-
-        # Convert True / False to 'yes' / 'no' for usage in ssh_config
-        if self.params['forward_agent'] is True:
-            args['forward_agent'] = 'yes'
-        if self.params['forward_agent'] is False:
-            args['forward_agent'] = 'no'
 
         config_changed = False
         hosts_changed = []
@@ -256,7 +315,8 @@ class SSHConfig():
             try:
                 self.config.write_to_ssh_config()
             except PermissionError as perm_exec:
-                self.module.fail_json(msg="Failed to write to %s due to permission issue: %s" % (self.config_file, to_native(perm_exec)))
+                self.module.fail_json(
+                    msg="Failed to write to %s due to permission issue: %s" % (self.config_file, to_native(perm_exec)))
             # Make sure we set the permission
             perm_mode = '0600'
             if self.config_file == '/etc/ssh/ssh_config':
@@ -297,29 +357,34 @@ def main():
             group=dict(default=None, type='str'),
             host=dict(type='str', required=True),
             hostname=dict(type='str'),
+            host_key_algorithms=dict(type='str', no_log=False),
             identity_file=dict(type='path'),
+            identities_only=dict(type='bool'),
             port=dict(type='str'),
             proxycommand=dict(type='str', default=None),
+            proxyjump=dict(type='str', default=None),
             forward_agent=dict(type='bool'),
+            add_keys_to_agent=dict(type='bool'),
             remote_user=dict(type='str'),
             ssh_config_file=dict(default=None, type='path'),
             state=dict(type='str', default='present', choices=['present', 'absent']),
             strict_host_key_checking=dict(
+                type='str',
                 default=None,
-                choices=['yes', 'no', 'ask']
+                choices=['yes', 'no', 'ask', 'accept-new'],
             ),
+            controlmaster=dict(type='str', default=None, choices=['yes', 'no', 'ask', 'auto', 'autoask']),
+            controlpath=dict(type='str', default=None),
+            controlpersist=dict(type='str', default=None),
             user=dict(default=None, type='str'),
             user_known_hosts_file=dict(type='str', default=None),
         ),
         supports_check_mode=True,
         mutually_exclusive=[
             ['user', 'ssh_config_file'],
+            ['proxycommand', 'proxyjump'],
         ],
     )
-
-    if not HAS_STORM:
-        module.fail_json(changed=False, msg=missing_required_lib("stormssh"),
-                         exception=STORM_IMP_ERR)
 
     ssh_config_obj = SSHConfig(module)
     ssh_config_obj.ensure_state()

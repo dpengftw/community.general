@@ -13,10 +13,17 @@ DOCUMENTATION = '''
 module: pacemaker_cluster
 short_description: Manage pacemaker clusters
 author:
-- Mathieu Bultel (@matbu)
+  - Mathieu Bultel (@matbu)
 description:
-   - This module can manage a pacemaker cluster and nodes from Ansible using
-     the pacemaker cli.
+  - This module can manage a pacemaker cluster and nodes from Ansible using
+    the pacemaker cli.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+    check_mode:
+      support: full
+    diff_mode:
+      support: none
 options:
     state:
       description:
@@ -181,6 +188,8 @@ def main():
             if cluster_state == state:
                 module.exit_json(changed=changed, out=cluster_state)
             else:
+                if module.check_mode:
+                    module.exit_json(changed=True)
                 set_cluster(module, state, timeout, force)
                 cluster_state = get_cluster_status(module)
                 if cluster_state == state:
@@ -194,12 +203,16 @@ def main():
                 if node_state[1].strip().lower() == state:
                     module.exit_json(changed=changed, out=cluster_state)
                 else:
+                    if module.check_mode:
+                        module.exit_json(changed=True)
                     # Set cluster status if needed
                     set_cluster(module, state, timeout, force)
                     cluster_state = get_node_status(module, node)
                     module.exit_json(changed=True, out=cluster_state)
 
     if state in ['restart']:
+        if module.check_mode:
+            module.exit_json(changed=True)
         set_cluster(module, 'offline', timeout, force)
         cluster_state = get_cluster_status(module)
         if cluster_state == 'offline':
@@ -213,6 +226,8 @@ def main():
             module.fail_json(msg="Failed during the restart of the cluster, the cluster can't be stopped")
 
     if state in ['cleanup']:
+        if module.check_mode:
+            module.exit_json(changed=True)
         clean_cluster(module, timeout)
         cluster_state = get_cluster_status(module)
         module.exit_json(changed=True,

@@ -17,6 +17,13 @@ description:
     set or update a configuration attribute.
   - Manages BIOS configuration settings.
   - Manages OOB controller configuration settings.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: none
+  diff_mode:
+    support: none
 options:
   category:
     required: true
@@ -57,8 +64,10 @@ options:
   timeout:
     description:
       - Timeout in seconds for HTTP requests to OOB controller.
-    default: 10
+      - The default value for this parameter changed from V(10) to V(60)
+        in community.general 9.0.0.
     type: int
+    default: 60
   boot_order:
     required: false
     description:
@@ -80,6 +89,12 @@ options:
       - ID of the System, Manager or Chassis to modify.
     type: str
     version_added: '0.2.0'
+  service_id:
+    required: false
+    description:
+      - ID of the manager to update.
+    type: str
+    version_added: '8.4.0'
   nic_addr:
     required: false
     description:
@@ -123,8 +138,50 @@ options:
     type: dict
     default: {}
     version_added: '5.7.0'
+  storage_subsystem_id:
+    required: false
+    description:
+      - Id of the Storage Subsystem on which the volume is to be created.
+    type: str
+    default: ''
+    version_added: '7.3.0'
+  volume_ids:
+    required: false
+    description:
+      - List of IDs of volumes to be deleted.
+    type: list
+    default: []
+    elements: str
+    version_added: '7.3.0'
+  secure_boot_enable:
+    required: false
+    description:
+      - Setting parameter to enable or disable SecureBoot.
+    type: bool
+    default: True
+    version_added: '7.5.0'
+  volume_details:
+    required: false
+    description:
+      - Setting dict of volume to be created.
+    type: dict
+    default: {}
+    version_added: '7.5.0'
+  ciphers:
+    required: false
+    description:
+      - SSL/TLS Ciphers to use for the request.
+      - 'When a list is provided, all ciphers are joined in order with V(:).'
+      - See the L(OpenSSL Cipher List Format,https://www.openssl.org/docs/manmaster/man1/openssl-ciphers.html#CIPHER-LIST-FORMAT)
+        for more details.
+      - The available ciphers is dependent on the Python and OpenSSL/LibreSSL versions.
+    type: list
+    elements: str
+    version_added: 9.2.0
 
-author: "Jose Delarosa (@jose-delarosa)"
+author:
+  - "Jose Delarosa (@jose-delarosa)"
+  - "T S Kushal (@TSKushal)"
 '''
 
 EXAMPLES = '''
@@ -255,6 +312,56 @@ EXAMPLES = '''
       baseuri: "{{ baseuri }}"
       username: "{{ username }}"
       password: "{{ password }}"
+
+  - name: Enable SecureBoot
+    community.general.redfish_config:
+      category: Systems
+      command: EnableSecureBoot
+      baseuri: "{{ baseuri }}"
+      username: "{{ username }}"
+      password: "{{ password }}"
+
+  - name: Set SecureBoot
+    community.general.redfish_config:
+      category: Systems
+      command: SetSecureBoot
+      baseuri: "{{ baseuri }}"
+      username: "{{ username }}"
+      password: "{{ password }}"
+      secure_boot_enable: True
+
+  - name: Delete All Volumes
+    community.general.redfish_config:
+      category: Systems
+      command: DeleteVolumes
+      baseuri: "{{ baseuri }}"
+      username: "{{ username }}"
+      password: "{{ password }}"
+      storage_subsystem_id: "DExxxxxx"
+      volume_ids: ["volume1", "volume2"]
+
+  - name: Create Volume
+    community.general.redfish_config:
+      category: Systems
+      command: CreateVolume
+      baseuri: "{{ baseuri }}"
+      username: "{{ username }}"
+      password: "{{ password }}"
+      storage_subsystem_id: "DExxxxxx"
+      volume_details:
+        Name: "MR Volume"
+        RAIDType: "RAID0"
+        Drives:
+          - "/redfish/v1/Systems/1/Storage/DE00B000/Drives/1"
+
+  - name: Set service identification to {{ service_id }}
+    community.general.redfish_config:
+      category: Manager
+      command: SetServiceIdentification
+      service_id: "{{ service_id }}"
+      baseuri: "{{ baseuri }}"
+      username: "{{ username }}"
+      password: "{{ password }}"
 '''
 
 RETURN = '''
@@ -273,8 +380,8 @@ from ansible.module_utils.common.text.converters import to_native
 # More will be added as module features are expanded
 CATEGORY_COMMANDS_ALL = {
     "Systems": ["SetBiosDefaultSettings", "SetBiosAttributes", "SetBootOrder",
-                "SetDefaultBootOrder"],
-    "Manager": ["SetNetworkProtocols", "SetManagerNic", "SetHostInterface"],
+                "SetDefaultBootOrder", "EnableSecureBoot", "SetSecureBoot", "DeleteVolumes", "CreateVolume"],
+    "Manager": ["SetNetworkProtocols", "SetManagerNic", "SetHostInterface", "SetServiceIdentification"],
     "Sessions": ["SetSessionService"],
 }
 
@@ -290,13 +397,14 @@ def main():
             password=dict(no_log=True),
             auth_token=dict(no_log=True),
             bios_attributes=dict(type='dict', default={}),
-            timeout=dict(type='int', default=10),
+            timeout=dict(type='int', default=60),
             boot_order=dict(type='list', elements='str', default=[]),
             network_protocols=dict(
                 type='dict',
                 default={}
             ),
             resource_id=dict(),
+            service_id=dict(),
             nic_addr=dict(default='null'),
             nic_config=dict(
                 type='dict',
@@ -306,6 +414,11 @@ def main():
             hostinterface_config=dict(type='dict', default={}),
             hostinterface_id=dict(),
             sessions_config=dict(type='dict', default={}),
+            storage_subsystem_id=dict(type='str', default=''),
+            volume_ids=dict(type='list', default=[], elements='str'),
+            secure_boot_enable=dict(type='bool', default=True),
+            volume_details=dict(type='dict', default={}),
+            ciphers=dict(type='list', elements='str'),
         ),
         required_together=[
             ('username', 'password'),
@@ -352,13 +465,31 @@ def main():
     # HostInterface instance ID
     hostinterface_id = module.params['hostinterface_id']
 
+    # Service Identification
+    service_id = module.params['service_id']
+
     # Sessions config options
     sessions_config = module.params['sessions_config']
+
+    # Volume deletion options
+    storage_subsystem_id = module.params['storage_subsystem_id']
+    volume_ids = module.params['volume_ids']
+
+    # Set SecureBoot options
+    secure_boot_enable = module.params['secure_boot_enable']
+
+    # Volume creation options
+    volume_details = module.params['volume_details']
+    storage_subsystem_id = module.params['storage_subsystem_id']
+
+    # ciphers
+    ciphers = module.params['ciphers']
 
     # Build root URI
     root_uri = "https://" + module.params['baseuri']
     rf_utils = RedfishUtils(creds, root_uri, timeout, module,
-                            resource_id=resource_id, data_modification=True, strip_etag_quotes=strip_etag_quotes)
+                            resource_id=resource_id, data_modification=True, strip_etag_quotes=strip_etag_quotes,
+                            ciphers=ciphers)
 
     # Check that Category is valid
     if category not in CATEGORY_COMMANDS_ALL:
@@ -386,6 +517,14 @@ def main():
                 result = rf_utils.set_boot_order(boot_order)
             elif command == "SetDefaultBootOrder":
                 result = rf_utils.set_default_boot_order()
+            elif command == "EnableSecureBoot":
+                result = rf_utils.enable_secure_boot()
+            elif command == "SetSecureBoot":
+                result = rf_utils.set_secure_boot(secure_boot_enable)
+            elif command == "DeleteVolumes":
+                result = rf_utils.delete_volumes(storage_subsystem_id, volume_ids)
+            elif command == "CreateVolume":
+                result = rf_utils.create_volume(volume_details, storage_subsystem_id)
 
     elif category == "Manager":
         # execute only if we find a Manager service resource
@@ -400,6 +539,8 @@ def main():
                 result = rf_utils.set_manager_nic(nic_addr, nic_config)
             elif command == "SetHostInterface":
                 result = rf_utils.set_hostinterface_attributes(hostinterface_config, hostinterface_id)
+            elif command == "SetServiceIdentification":
+                result = rf_utils.set_service_identification(service_id)
 
     elif category == "Sessions":
         # execute only if we find a Sessions resource

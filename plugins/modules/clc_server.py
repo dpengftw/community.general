@@ -14,6 +14,13 @@ module: clc_server
 short_description: Create, Delete, Start and Stop servers in CenturyLink Cloud
 description:
   - An Ansible module to Create, Delete, Start and Stop servers in CenturyLink Cloud.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   additional_disks:
     description:
@@ -1494,7 +1501,7 @@ class ClcServer:
         return aa_policy_id
 
     #
-    #  This is the function that gets patched to the Request.server object using a lamda closure
+    #  This is the function that gets patched to the Request.server object using a lambda closure
     #
 
     @staticmethod

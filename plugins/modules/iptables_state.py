@@ -15,6 +15,9 @@ module: iptables_state
 short_description: Save iptables state into a file or restore it from a file
 version_added: '1.1.0'
 author: quidame (@quidame)
+extends_documentation_fragment:
+  - community.general.attributes
+  - community.general.attributes.flow
 description:
   - C(iptables) is used to set up, maintain, and inspect the tables of IP
     packet filter rules in the Linux kernel.
@@ -31,17 +34,25 @@ description:
 notes:
   - The rollback feature is not a module option and depends on task's
     attributes. To enable it, the module must be played asynchronously, i.e.
-    by setting task attributes I(poll) to C(0), and I(async) to a value less
-    or equal to C(ANSIBLE_TIMEOUT). If I(async) is greater, the rollback will
+    by setting task attributes C(poll) to V(0), and C(async) to a value less
+    or equal to C(ANSIBLE_TIMEOUT). If C(async) is greater, the rollback will
     still happen if it shall happen, but you will experience a connection
     timeout instead of more relevant info returned by the module after its
     failure.
-  - This module supports I(check_mode).
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
+  action:
+    support: full
+  async:
+    support: full
 options:
   counters:
     description:
       - Save or restore the values of all packet and byte counters.
-      - When C(true), the module is not idempotent.
+      - When V(true), the module is not idempotent.
     type: bool
     default: false
   ip_version:
@@ -54,14 +65,14 @@ options:
     description:
       - Specify the path to the C(modprobe) program internally used by iptables
         related commands to load kernel modules.
-      - By default, C(/proc/sys/kernel/modprobe) is inspected to determine the
+      - By default, V(/proc/sys/kernel/modprobe) is inspected to determine the
         executable's path.
     type: path
   noflush:
     description:
-      - For I(state=restored), ignored otherwise.
-      - If C(false), restoring iptables rules from a file flushes (deletes)
-        all previous contents of the respective table(s). If C(true), the
+      - For O(state=restored), ignored otherwise.
+      - If V(false), restoring iptables rules from a file flushes (deletes)
+        all previous contents of the respective table(s). If V(true), the
         previous rules are left untouched (but policies are updated anyway,
         for all built-in chains).
     type: bool
@@ -81,10 +92,10 @@ options:
     required: true
   table:
     description:
-      - When I(state=restored), restore only the named table even if the input
+      - When O(state=restored), restore only the named table even if the input
         file contains other tables. Fail if the named table is not declared in
         the file.
-      - When I(state=saved), restrict output to the specified table. If not
+      - When O(state=saved), restrict output to the specified table. If not
         specified, output includes all active tables.
     type: str
     choices: [ filter, nat, mangle, raw, security ]
@@ -196,7 +207,9 @@ saved:
       "# Completed"
     ]
 tables:
-  description: The iptables we have interest for when module starts.
+  description:
+    - The iptables on the system before the module has run, separated by table.
+    - If the option O(table) is used, only this table is included.
   type: dict
   contains:
     table:
@@ -260,10 +273,7 @@ def read_state(b_path):
     '''
     with open(b_path, 'r') as f:
         text = f.read()
-    lines = text.splitlines()
-    while '' in lines:
-        lines.remove('')
-    return lines
+    return [t for t in text.splitlines() if t != '']
 
 
 def write_state(b_path, lines, changed):
@@ -273,8 +283,7 @@ def write_state(b_path, lines, changed):
     # Populate a temporary file
     tmpfd, tmpfile = tempfile.mkstemp()
     with os.fdopen(tmpfd, 'w') as f:
-        for line in lines:
-            f.write('%s\n' % line)
+        f.write("{0}\n".format("\n".join(lines)))
 
     # Prepare to copy temporary file to the final destination
     if not os.path.exists(b_path):
@@ -335,29 +344,31 @@ def filter_and_format_state(string):
     string = re.sub(r'((^|\n)# (Generated|Completed)[^\n]*) on [^\n]*', r'\1', string)
     if not module.params['counters']:
         string = re.sub(r'\[[0-9]+:[0-9]+\]', r'[0:0]', string)
-    lines = string.splitlines()
-    while '' in lines:
-        lines.remove('')
+    lines = [line for line in string.splitlines() if line != '']
     return lines
 
 
-def per_table_state(command, state):
+def parse_per_table_state(all_states_dump):
     '''
     Convert raw iptables-save output into usable datastructure, for reliable
     comparisons between initial and final states.
     '''
+    lines = filter_and_format_state(all_states_dump)
     tables = dict()
-    for t in TABLES:
-        COMMAND = list(command)
-        if '*%s' % t in state.splitlines():
-            COMMAND.extend(['--table', t])
-            dummy, out, dummy = module.run_command(COMMAND, check_rc=True)
-            out = re.sub(r'(^|\n)(# Generated|# Completed|[*]%s|COMMIT)[^\n]*' % t, r'', out)
-            out = re.sub(r' *\[[0-9]+:[0-9]+\] *', r'', out)
-            table = out.splitlines()
-            while '' in table:
-                table.remove('')
-            tables[t] = table
+    current_table = ''
+    current_list = list()
+    for line in lines:
+        if re.match(r'^[*](filter|mangle|nat|raw|security)$', line):
+            current_table = line[1:]
+            continue
+        if line == 'COMMIT':
+            tables[current_table] = current_list
+            current_table = ''
+            current_list = list()
+            continue
+        if line.startswith('# '):
+            continue
+        current_list.append(line)
     return tables
 
 
@@ -448,6 +459,7 @@ def main():
         if not os.access(b_path, os.R_OK):
             module.fail_json(msg="Source %s not readable" % path)
         state_to_restore = read_state(b_path)
+        cmd = None
     else:
         cmd = ' '.join(SAVECOMMAND)
 
@@ -456,7 +468,7 @@ def main():
     # The issue comes when wanting to restore state from empty iptable-save's
     # output... what happens when, say:
     # - no table is specified, and iptables-save's output is only nat table;
-    # - we give filter's ruleset to iptables-restore, that locks ourselve out
+    # - we give filter's ruleset to iptables-restore, that locks ourselves out
     #   of the host;
     # then trying to roll iptables state back to the previous (working) setup
     # doesn't override current filter table because no filter table is stored
@@ -484,7 +496,7 @@ def main():
     # Depending on the value of 'table', initref_state may differ from
     # initial_state.
     (rc, stdout, stderr) = module.run_command(SAVECOMMAND, check_rc=True)
-    tables_before = per_table_state(SAVECOMMAND, stdout)
+    tables_before = parse_per_table_state(stdout)
     initref_state = filter_and_format_state(stdout)
 
     if state == 'saved':
@@ -548,8 +560,7 @@ def main():
     if module.check_mode:
         tmpfd, tmpfile = tempfile.mkstemp()
         with os.fdopen(tmpfd, 'w') as f:
-            for line in initial_state:
-                f.write('%s\n' % line)
+            f.write("{0}\n".format("\n".join(initial_state)))
 
         if filecmp.cmp(tmpfile, b_path):
             restored_state = initial_state
@@ -582,14 +593,17 @@ def main():
 
         (rc, stdout, stderr) = module.run_command(SAVECOMMAND, check_rc=True)
         restored_state = filter_and_format_state(stdout)
-
+    tables_after = parse_per_table_state('\n'.join(restored_state))
     if restored_state not in (initref_state, initial_state):
-        if module.check_mode:
-            changed = True
-        else:
-            tables_after = per_table_state(SAVECOMMAND, stdout)
-            if tables_after != tables_before:
+        for table_name, table_content in tables_after.items():
+            if table_name not in tables_before:
+                # Would initialize a table, which doesn't exist yet
                 changed = True
+                break
+            if tables_before[table_name] != table_content:
+                # Content of some table changes
+                changed = True
+                break
 
     if _back is None or module.check_mode:
         module.exit_json(
@@ -632,7 +646,7 @@ def main():
     os.remove(b_back)
 
     (rc, stdout, stderr) = module.run_command(SAVECOMMAND, check_rc=True)
-    tables_rollback = per_table_state(SAVECOMMAND, stdout)
+    tables_rollback = parse_per_table_state(stdout)
 
     msg = (
         "Failed to confirm state restored from %s after %ss. "

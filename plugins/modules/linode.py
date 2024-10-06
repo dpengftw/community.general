@@ -13,7 +13,14 @@ DOCUMENTATION = '''
 module: linode
 short_description: Manage instances on the Linode Public Cloud
 description:
-     - Manage Linode Public Cloud instances and optionally wait for it to be 'running'.
+  - Manage Linode Public Cloud instances and optionally wait for it to be 'running'.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: none
+  diff_mode:
+    support: none
 options:
   state:
     description:
@@ -24,7 +31,7 @@ options:
   api_key:
     description:
      - Linode API key.
-     - C(LINODE_API_KEY) env variable can be used instead.
+     - E(LINODE_API_KEY) environment variable can be used instead.
     type: str
     required: true
   name:
@@ -117,7 +124,7 @@ options:
   private_ip:
     description:
     - Add private IPv4 address when Linode is created.
-    - Default is C(false).
+    - Default is V(false).
     type: bool
   ssh_pub_key:
     description:
@@ -142,7 +149,7 @@ options:
     type: int
   wait:
     description:
-     - wait for the instance to be in state C(running) before returning
+     - wait for the instance to be in state V(running) before returning
     type: bool
     default: true
   wait_timeout:
@@ -156,7 +163,6 @@ options:
     type: bool
     default: true
 requirements:
-    - python >= 2.6
     - linode-python
 author:
 - Vincent Viallet (@zbal)
@@ -664,7 +670,7 @@ def main():
         backupwindow=backupwindow,
     )
 
-    kwargs = dict((k, v) for k, v in check_items.items() if v is not None)
+    kwargs = {k: v for k, v in check_items.items() if v is not None}
 
     # setup the auth
     try:

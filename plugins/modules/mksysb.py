@@ -17,6 +17,13 @@ module: mksysb
 short_description: Generates AIX mksysb rootvg backups
 description:
   - This module manages a basic AIX mksysb (image) of rootvg.
+extends_documentation_fragment:
+  - community.general.attributes
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   backup_crypt_files:
     description:
@@ -101,10 +108,6 @@ import os
 from ansible_collections.community.general.plugins.module_utils.cmd_runner import CmdRunner, cmd_runner_fmt
 from ansible_collections.community.general.plugins.module_utils.module_helper import ModuleHelper
 
-from ansible_collections.community.general.plugins.module_utils.module_helper import (
-    ArgFormat
-)
-
 
 class MkSysB(ModuleHelper):
     module = dict(
@@ -135,6 +138,7 @@ class MkSysB(ModuleHelper):
         backup_dmapi_fs=cmd_runner_fmt.as_bool("-A"),
         combined_path=cmd_runner_fmt.as_func(cmd_runner_fmt.unpack_args(lambda p, n: ["%s/%s" % (p, n)])),
     )
+    use_old_vardict = False
 
     def __init_module__(self):
         if not os.path.isdir(self.vars.storage_path):
@@ -143,8 +147,7 @@ class MkSysB(ModuleHelper):
     def __run__(self):
         def process(rc, out, err):
             if rc != 0:
-                self.do_raise("mksysb failed.")
-            self.vars.msg = out
+                self.do_raise("mksysb failed: {0}".format(out))
 
         runner = CmdRunner(
             self.module,
@@ -155,6 +158,8 @@ class MkSysB(ModuleHelper):
                      'extended_attrs', 'backup_crypt_files', 'backup_dmapi_fs', 'new_image_data', 'combined_path'],
                     output_process=process, check_mode_skip=True) as ctx:
             ctx.run(combined_path=[self.vars.storage_path, self.vars.name])
+            if self.verbosity >= 4:
+                self.vars.run_info = ctx.run_info
 
         self.changed = True
 

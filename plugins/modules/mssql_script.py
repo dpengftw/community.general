@@ -18,6 +18,17 @@ version_added: "4.0.0"
 description:
   - Execute SQL scripts on a MSSQL database.
 
+extends_documentation_fragment:
+  - community.general.attributes
+
+attributes:
+    check_mode:
+        support: partial
+        details:
+          - The script will not be executed in check mode.
+    diff_mode:
+        support: none
+
 options:
     name:
         description: Database to run script against.
@@ -35,33 +46,41 @@ options:
         type: str
         required: true
     login_port:
-        description: Port of the MSSQL server. Requires I(login_host) be defined as well.
+        description: Port of the MSSQL server. Requires O(login_host) be defined as well.
         default: 1433
         type: int
     script:
         description:
           - The SQL script to be executed.
-          - Script can contain multiple SQL statements. Multiple Batches can be separated by C(GO) command.
+          - Script can contain multiple SQL statements. Multiple Batches can be separated by V(GO) command.
           - Each batch must return at least one result set.
         required: true
         type: str
+    transaction:
+        description:
+          - If transactional mode is requested, start a transaction and commit the change only if the script succeed.
+            Otherwise, rollback the transaction.
+          - If transactional mode is not requested (default), automatically commit the change.
+        type: bool
+        default: false
+        version_added: 8.4.0
     output:
         description:
-          - With C(default) each row will be returned as a list of values. See C(query_results).
-          - Output format C(dict) will return dictionary with the column names as keys. See C(query_results_dict).
-          - C(dict) requires named columns to be returned by each query otherwise an error is thrown.
+          - With V(default) each row will be returned as a list of values. See RV(query_results).
+          - Output format V(dict) will return dictionary with the column names as keys. See RV(query_results_dict).
+          - V(dict) requires named columns to be returned by each query otherwise an error is thrown.
         choices: [ "dict", "default" ]
         default: 'default'
         type: str
     params:
         description: |
-            Parameters passed to the script as SQL parameters. ('SELECT %(name)s"' with C(example: '{"name": "John Doe"}).)'
+            Parameters passed to the script as SQL parameters.
+            (Query V('SELECT %(name\)s"') with V(example: '{"name": "John Doe"}).)'
         type: dict
 notes:
    - Requires the pymssql Python package on the remote host. For Ubuntu, this
      is as easy as C(pip install pymssql) (See M(ansible.builtin.pip).)
 requirements:
-   - python >= 2.7
    - pymssql
 
 author:
@@ -93,6 +112,19 @@ EXAMPLES = r'''
     that:
       - result_params.query_results[0][0][0][0] == 'msdb'
       - result_params.query_results[0][0][0][1] == 'ONLINE'
+
+- name: Query within a transaction
+  community.general.mssql_script:
+    login_user: "{{ mssql_login_user }}"
+    login_password: "{{ mssql_login_password }}"
+    login_host: "{{ mssql_host }}"
+    login_port: "{{ mssql_port }}"
+    script: |
+      UPDATE sys.SomeTable SET desc = 'some_table_desc' WHERE name = %(dbname)s
+      UPDATE sys.AnotherTable SET desc = 'another_table_desc' WHERE name = %(dbname)s
+    transaction: true
+    params:
+      dbname: msdb
 
 - name: two batches with default output
   community.general.mssql_script:
@@ -137,17 +169,17 @@ EXAMPLES = r'''
 
 RETURN = r'''
 query_results:
-    description: List of batches (queries separated by C(GO) keyword).
+    description: List of batches (queries separated by V(GO) keyword).
     type: list
     elements: list
-    returned: success and I(output=default)
+    returned: success and O(output=default)
     sample: [[[["Batch 0 - Select 0"]], [["Batch 0 - Select 1"]]], [[["Batch 1 - Select 0"]]]]
     contains:
         queries:
             description:
               - List of result sets of each query.
               - If a query returns no results, the results of this and all the following queries will not be included in the output.
-              - Use the C(GO) keyword in I(script) to separate queries.
+              - Use the V(GO) keyword in O(script) to separate queries.
             type: list
             elements: list
             contains:
@@ -164,10 +196,10 @@ query_results:
                             example: ["Batch 0 - Select 0"]
                             returned: success, if output is default
 query_results_dict:
-    description: List of batches (queries separated by C(GO) keyword).
+    description: List of batches (queries separated by V(GO) keyword).
     type: list
     elements: list
-    returned: success and I(output=dict)
+    returned: success and O(output=dict)
     sample: [[[["Batch 0 - Select 0"]], [["Batch 0 - Select 1"]]], [[["Batch 1 - Select 0"]]]]
     contains:
         queries:
@@ -219,6 +251,7 @@ def run_module():
         script=dict(required=True),
         output=dict(default='default', choices=['dict', 'default']),
         params=dict(type='dict'),
+        transaction=dict(type='bool', default=False),
     )
 
     result = dict(
@@ -241,6 +274,8 @@ def run_module():
     script = module.params['script']
     output = module.params['output']
     sql_params = module.params['params']
+    # Added param to set the transactional mode (true/false)
+    transaction = module.params['transaction']
 
     login_querystring = login_host
     if login_port != 1433:
@@ -262,21 +297,40 @@ def run_module():
             module.fail_json(msg="unable to connect, check login_user and login_password are correct, or alternatively check your "
                                  "@sysconfdir@/freetds.conf / ${HOME}/.freetds.conf")
 
-    conn.autocommit(True)
+    # If transactional mode is requested, start a transaction
+    conn.autocommit(not transaction)
 
     query_results_key = 'query_results'
     if output == 'dict':
         cursor = conn.cursor(as_dict=True)
         query_results_key = 'query_results_dict'
 
-    queries = script.split('\nGO\n')
+    # Process the script into batches
+    queries = []
+    current_batch = []
+    for statement in script.splitlines(True):
+        # Ignore the Byte Order Mark, if found
+        if statement.strip() == '\uFEFF':
+            continue
+
+        # Assume each 'GO' is on its own line but may have leading/trailing whitespace
+        # and be of mixed-case
+        if statement.strip().upper() != 'GO':
+            current_batch.append(statement)
+        else:
+            queries.append(''.join(current_batch))
+            current_batch = []
+    if len(current_batch) > 0:
+        queries.append(''.join(current_batch))
+
     result['changed'] = True
     if module.check_mode:
         module.exit_json(**result)
 
     query_results = []
-    try:
-        for query in queries:
+    for query in queries:
+        # Catch and exit on any bad query errors
+        try:
             cursor.execute(query, sql_params)
             qry_result = []
             rows = cursor.fetchall()
@@ -284,8 +338,24 @@ def run_module():
                 qry_result.append(rows)
                 rows = cursor.fetchall()
             query_results.append(qry_result)
-    except Exception as e:
-        return module.fail_json(msg="query failed", query=query, error=str(e), **result)
+        except Exception as e:
+            # We know we executed the statement so this error just means we have no resultset
+            # which is ok (eg UPDATE/INSERT)
+            if (
+                type(e).__name__ == 'OperationalError' and
+                str(e) == 'Statement not executed or executed statement has no resultset'
+            ):
+                query_results.append([])
+            else:
+                # Rollback transaction before failing the module in case of error
+                if transaction:
+                    conn.rollback()
+                error_msg = '%s: %s' % (type(e).__name__, str(e))
+                module.fail_json(msg="query failed", query=query, error=error_msg, **result)
+
+    # Commit transaction before exiting the module in case of no error
+    if transaction:
+        conn.commit()
 
     # ensure that the result is json serializable
     qry_results = json.loads(json.dumps(query_results, default=clean_output))

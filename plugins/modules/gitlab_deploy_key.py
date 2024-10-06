@@ -20,11 +20,17 @@ author:
   - Marcus Watkins (@marwatk)
   - Guillaume Martinez (@Lunik)
 requirements:
-  - python >= 2.7
   - python-gitlab python module
 extends_documentation_fragment:
   - community.general.auth_basic
   - community.general.gitlab
+  - community.general.attributes
+
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 
 options:
   project:
@@ -49,8 +55,8 @@ options:
     default: false
   state:
     description:
-      - When C(present) the deploy key added to the project if it doesn't exist.
-      - When C(absent) it will be removed from the project if it exists.
+      - When V(present) the deploy key added to the project if it doesn't exist.
+      - When V(absent) it will be removed from the project if it exists.
     default: present
     type: str
     choices: [ "present", "absent" ]
@@ -114,7 +120,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_native
 
 from ansible_collections.community.general.plugins.module_utils.gitlab import (
-    auth_argument_spec, find_project, gitlab_authentication, gitlab, ensure_gitlab_package
+    auth_argument_spec, find_project, gitlab_authentication, gitlab, list_all_kwargs
 )
 
 
@@ -151,6 +157,7 @@ class GitLabDeployKey(object):
             changed = True
         else:
             changed, deploy_key = self.update_deploy_key(self.deploy_key_object, {
+                'title': key_title,
                 'can_push': options['can_push']})
 
         self.deploy_key_object = deploy_key
@@ -189,9 +196,9 @@ class GitLabDeployKey(object):
         changed = False
 
         for arg_key, arg_value in arguments.items():
-            if arguments[arg_key] is not None:
-                if getattr(deploy_key, arg_key) != arguments[arg_key]:
-                    setattr(deploy_key, arg_key, arguments[arg_key])
+            if arg_value is not None:
+                if getattr(deploy_key, arg_key) != arg_value:
+                    setattr(deploy_key, arg_key, arg_value)
                     changed = True
 
         return (changed, deploy_key)
@@ -201,8 +208,7 @@ class GitLabDeployKey(object):
     @param key_title Title of the key
     '''
     def find_deploy_key(self, project, key_title):
-        deploy_keys = project.keys.list(all=True)
-        for deploy_key in deploy_keys:
+        for deploy_key in project.keys.list(**list_all_kwargs):
             if (deploy_key.title == key_title):
                 return deploy_key
 
@@ -253,15 +259,15 @@ def main():
         ],
         supports_check_mode=True,
     )
-    ensure_gitlab_package(module)
+
+    # check prerequisites and connect to gitlab server
+    gitlab_instance = gitlab_authentication(module)
 
     state = module.params['state']
     project_identifier = module.params['project']
     key_title = module.params['title']
     key_keyfile = module.params['key']
     key_can_push = module.params['can_push']
-
-    gitlab_instance = gitlab_authentication(module)
 
     gitlab_deploy_key = GitLabDeployKey(module, gitlab_instance)
 

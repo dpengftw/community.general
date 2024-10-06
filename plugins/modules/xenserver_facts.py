@@ -23,6 +23,10 @@ extends_documentation_fragment:
   - community.general.attributes
   - community.general.attributes.facts
   - community.general.attributes.facts_module
+attributes:
+  check_mode:
+    version_added: 3.3.0
+    # This was backported to 2.5.4 and 1.3.11 as well, since this was a bugfix
 options: {}
 '''
 
@@ -131,7 +135,7 @@ def change_keys(recs, key='uuid', filter_func=None):
 
         for param_name, param_value in rec.items():
             # param_value may be of type xmlrpc.client.DateTime,
-            # which is not simply convertable to str.
+            # which is not simply convertible to str.
             # Use 'value' attr to get the str value,
             # following an example in xmlrpc.client.DateTime document
             if hasattr(param_value, "value"):

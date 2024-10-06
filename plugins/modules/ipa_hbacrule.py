@@ -13,7 +13,12 @@ module: ipa_hbacrule
 author: Thomas Krahn (@Nosmoht)
 short_description: Manage FreeIPA HBAC rule
 description:
-- Add, modify or delete an IPA HBAC rule using IPA API.
+  - Add, modify or delete an IPA HBAC rule using IPA API.
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 options:
   cn:
     description:
@@ -104,7 +109,8 @@ options:
     type: list
     elements: str
 extends_documentation_fragment:
-- community.general.ipa.documentation
+  - community.general.ipa.documentation
+  - community.general.attributes
 
 '''
 
@@ -155,6 +161,7 @@ import traceback
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.community.general.plugins.module_utils.ipa import IPAClient, ipa_argument_spec
 from ansible.module_utils.common.text.converters import to_native
+from ansible_collections.community.general.plugins.module_utils.version import LooseVersion
 
 
 class HBACRuleIPAClient(IPAClient):
@@ -225,10 +232,17 @@ def ensure(module, client):
     name = module.params['cn']
     state = module.params['state']
 
+    ipa_version = client.get_ipa_version()
     if state in ['present', 'enabled']:
-        ipaenabledflag = 'TRUE'
+        if LooseVersion(ipa_version) < LooseVersion('4.9.10'):
+            ipaenabledflag = 'TRUE'
+        else:
+            ipaenabledflag = True
     else:
-        ipaenabledflag = 'FALSE'
+        if LooseVersion(ipa_version) < LooseVersion('4.9.10'):
+            ipaenabledflag = 'FALSE'
+        else:
+            ipaenabledflag = False
 
     host = module.params['host']
     hostcategory = module.params['hostcategory']

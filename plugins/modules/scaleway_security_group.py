@@ -18,11 +18,16 @@ module: scaleway_security_group
 short_description: Scaleway Security Group management module
 author: Antoine Barbare (@abarbare)
 description:
-    - This module manages Security Group on Scaleway account
-      U(https://developer.scaleway.com).
+    - "This module manages Security Group on Scaleway account U(https://developer.scaleway.com)."
 extends_documentation_fragment:
-- community.general.scaleway
+    - community.general.scaleway
+    - community.general.attributes
 
+attributes:
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
 
 options:
   state:
@@ -40,7 +45,7 @@ options:
 
   region:
     description:
-      - Scaleway region to use (for example C(par1)).
+      - Scaleway region to use (for example V(par1)).
     type: str
     required: true
     choices:
@@ -105,8 +110,8 @@ EXAMPLES = '''
 
 RETURN = '''
 data:
-    description: This is only present when C(state=present)
-    returned: when C(state=present)
+    description: This is only present when O(state=present).
+    returned: when O(state=present)
     type: dict
     sample: {
         "scaleway_security_group": {
@@ -130,11 +135,11 @@ from uuid import uuid4
 
 
 def payload_from_security_group(security_group):
-    return dict(
-        (k, v)
+    return {
+        k: v
         for k, v in security_group.items()
         if k != 'id' and v is not None
-    )
+    }
 
 
 def present_strategy(api, security_group):
@@ -144,8 +149,7 @@ def present_strategy(api, security_group):
     if not response.ok:
         api.module.fail_json(msg='Error getting security groups "%s": "%s" (%s)' % (response.info['msg'], response.json['message'], response.json))
 
-    security_group_lookup = dict((sg['name'], sg)
-                                 for sg in response.json['security_groups'])
+    security_group_lookup = {sg['name']: sg for sg in response.json['security_groups']}
 
     if security_group['name'] not in security_group_lookup.keys():
         ret['changed'] = True
@@ -176,8 +180,7 @@ def absent_strategy(api, security_group):
     if not response.ok:
         api.module.fail_json(msg='Error getting security groups "%s": "%s" (%s)' % (response.info['msg'], response.json['message'], response.json))
 
-    security_group_lookup = dict((sg['name'], sg)
-                                 for sg in response.json['security_groups'])
+    security_group_lookup = {sg['name']: sg for sg in response.json['security_groups']}
     if security_group['name'] not in security_group_lookup.keys():
         return ret
 
